@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+data/
+
+.history
+logs/
+
+dev-doc
+coverage/

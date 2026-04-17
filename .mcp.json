@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cc-im": {
+      "command": "cc-im",
+      "args": [],
+      "description": "cc-im unified Bridge + MCP server (WeCom + Feishu + Telegram)"
+    }
+  }
+}
