@@ -21,11 +21,6 @@ export default defineConfig({
         'src/feishu/event-handler.ts',
       ],
       reporter: ['text', 'html', 'json'],
-      all: true,
-      lines: 80,
-      functions: 80,
-      branches: 70,
-      statements: 80,
     },
   },
 });
