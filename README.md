@@ -104,7 +104,7 @@ npx cc-im@latest
 ### 从源码构建
 
 ```bash
-git clone https://github.com/congqiu/cc-im.git
+git clone https://github.com/k-brother/cc-im.git
 cd cc-im
 pnpm install
 cp .env.example .env
