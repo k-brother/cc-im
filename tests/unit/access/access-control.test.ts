@@ -1,27 +1,56 @@
 import { describe, it, expect } from 'vitest';
-import { AccessControl } from '../../../src/access/access-control.js';
+import { AccessControl, isUserAllowedForPlatform } from '../../../src/access/access-control.js';
+import type { Config } from '../../../src/config.js';
+import type { PrivilegedConfig } from '../../../src/access/types.js';
 
-describe('AccessControl', () => {
-  describe('空白名单（开发模式）', () => {
-    it('应该允许所有用户', () => {
-      const ac = new AccessControl([]);
-      expect(ac.isAllowed('user1')).toBe(true);
-      expect(ac.isAllowed('user2')).toBe(true);
-      expect(ac.isAllowed('any-user')).toBe(true);
+function baseConfig(overrides: Partial<Config> = {}): Config {
+  return {
+    platforms: {},
+    enabledPlatforms: [],
+    claudeCliPath: 'claude',
+    claudeWorkDir: '/',
+    allowedBaseDirs: ['/'],
+    claudeSkipPermissions: false,
+    claudeTimeoutMs: 600000,
+    hookPort: 18900,
+    logDir: '/tmp',
+    logLevel: 'DEBUG',
+    ...overrides,
+  };
+}
+
+function privilegedUsers(partial: Partial<Record<'feishu' | 'telegram' | 'wecom' | 'dingtalk', string[]>>): PrivilegedConfig {
+  const empty = { feishu: [] as string[], telegram: [] as string[], wecom: [] as string[], dingtalk: [] as string[] };
+  return {
+    users: { ...empty, ...partial },
+    approval: {
+      targets: empty,
+      settings: { enabled: true, groupRequired: false, timeoutMs: 300_000, mode: 'any' },
+    },
+  };
+}
+
+describe('isUserAllowedForPlatform / AccessControl', () => {
+  describe('未配置 privileged', () => {
+    it('开发模式允许所有用户', () => {
+      const c = baseConfig();
+      expect(isUserAllowedForPlatform(c, 'any', 'telegram')).toBe(true);
+      const ac = new AccessControl(c);
+      expect(ac.isAllowed('u1', 'feishu')).toBe(true);
     });
   });
 
-  describe('白名单模式', () => {
-    it('应该允许白名单中的用户', () => {
-      const ac = new AccessControl(['user1', 'user2']);
-      expect(ac.isAllowed('user1')).toBe(true);
-      expect(ac.isAllowed('user2')).toBe(true);
-    });
-
-    it('应该拒绝不在白名单中的用户', () => {
-      const ac = new AccessControl(['user1', 'user2']);
-      expect(ac.isAllowed('user3')).toBe(false);
-      expect(ac.isAllowed('unknown')).toBe(false);
+  describe('已配置 privileged.users', () => {
+    it('按平台 users 限制', () => {
+      const c = baseConfig({
+        privileged: {
+          ...privilegedUsers({ feishu: ['f1'], telegram: ['t1'] }),
+        },
+      });
+      expect(isUserAllowedForPlatform(c, 'f1', 'feishu')).toBe(true);
+      expect(isUserAllowedForPlatform(c, 'f2', 'feishu')).toBe(false);
+      expect(isUserAllowedForPlatform(c, 't1', 'telegram')).toBe(true);
+      expect(isUserAllowedForPlatform(c, 't2', 'telegram')).toBe(false);
     });
   });
 });

@@ -5,19 +5,43 @@ import { join, isAbsolute } from 'node:path';
 import { createLogger } from './logger.js';
 import type { LogLevel } from './logger.js';
 import { APP_HOME } from './constants.js';
+import type { ApprovalSettings, PrivilegedConfig, StartupNotifyConfig } from './access/types.js';
+import type { Language } from './i18n.js';
 
 const logger = createLogger('Config');
 
-export type Platform = 'feishu' | 'telegram' | 'wecom';
+export type Platform = 'feishu' | 'telegram' | 'wecom' | 'dingtalk';
+
+/**
+ * 各平台配置结构
+ * 每个平台有通用的 botName 和平台特定的凭证
+ */
+export interface PlatformConfig {
+  botName?: string;
+  // 飞书专用
+  appId?: string;
+  appSecret?: string;
+  // Telegram 专用
+  botToken?: string;
+  // 企业微信专用
+  botId?: string;
+  botSecret?: string;
+  // 钉钉专用
+  appKey?: string;
+  agentId?: string;
+}
+
+export interface PlatformsConfig {
+  feishu?: PlatformConfig;
+  telegram?: PlatformConfig;
+  wecom?: PlatformConfig;
+  dingtalk?: PlatformConfig;
+}
 
 export interface Config {
-  enabledPlatforms: Platform[]; // 改为支持多平台
-  feishuAppId: string;
-  feishuAppSecret: string;
-  telegramBotToken: string;
-  wecomBotId: string;
-  wecomBotSecret: string;
-  allowedUserIds: string[];
+  platforms: PlatformsConfig;
+  // 检测到的已配置平台（从 platforms 自动计算）
+  enabledPlatforms: Platform[];
   claudeCliPath: string;
   claudeWorkDir: string;
   allowedBaseDirs: string[];
@@ -28,33 +52,20 @@ export interface Config {
   hookPort: number;
   logDir: string;
   logLevel: LogLevel;
-  // 机器人名称
+  // 全局机器人名称（各平台无 botName 时的后备值）
   botName?: string;
-  wecomBotName?: string;
-  feishuBotName?: string;
-  telegramBotName?: string;
-  // 启动通知配置
-  startupNotify?: StartupNotifyConfig;
+  // 高权限配置（白名单、启动通知、审批等）
+  privileged?: PrivilegedConfig;
+  // 系统语言（中英文）
+  language: Language;
 }
 
-export interface StartupNotifyConfig {
-  wecom?: PlatformNotifyConfig;
-  feishu?: PlatformNotifyConfig;
-  telegram?: PlatformNotifyConfig;
-}
+export type { Language } from './i18n.js';
 
-export interface PlatformNotifyConfig {
-  groups: string[];
-  users: string[];
-}
+export type { ApprovalConfig, PlatformNotifyConfig, StartupNotifyConfig } from './access/types.js';
 
 interface FileConfig {
-  feishuAppId?: string;
-  feishuAppSecret?: string;
-  telegramBotToken?: string;
-  wecomBotId?: string;
-  wecomBotSecret?: string;
-  allowedUserIds?: string[];
+  platforms?: PlatformsConfig;
   claudeCliPath?: string;
   claudeWorkDir?: string;
   allowedBaseDirs?: string[];
@@ -66,10 +77,53 @@ interface FileConfig {
   logDir?: string;
   logLevel?: LogLevel;
   botName?: string;
+  // 向后兼容旧版平铺配置
+  feishuAppId?: string;
+  feishuAppSecret?: string;
+  telegramBotToken?: string;
+  wecomBotId?: string;
+  wecomBotSecret?: string;
   wecomBotName?: string;
   feishuBotName?: string;
   telegramBotName?: string;
-  startupNotify?: StartupNotifyConfig;
+  dingtalkAppKey?: string;
+  dingtalkAppSecret?: string;
+  dingtalkAgentId?: string;
+  privileged?: PrivilegedConfig;
+  // 系统语言（中英文）
+  language?: Language;
+}
+
+function emptyPlatformRecord(): Record<Platform, string[]> {
+  return { feishu: [], telegram: [], wecom: [], dingtalk: [] };
+}
+
+function defaultApprovalSettings(): ApprovalSettings {
+  return {
+    enabled: false,
+    groupRequired: false,
+    timeoutMs: 300_000,
+    mode: 'any',
+  };
+}
+
+/**
+ * 合并 `privileged` 配置。
+ */
+function mergePrivilegedConfig(file: FileConfig): PrivilegedConfig | undefined {
+  if (!file.privileged) {
+    return undefined;
+  }
+
+  const p = file.privileged;
+  return {
+    users: { ...emptyPlatformRecord(), ...p.users },
+    startup: p.startup,
+    approval: {
+      targets: { ...emptyPlatformRecord(), ...p.approval?.targets },
+      settings: { ...defaultApprovalSettings(), ...p.approval?.settings },
+    },
+  };
 }
 
 function loadFileConfig(): FileConfig {
@@ -99,24 +153,51 @@ function parseCommaSeparated(value: string): string[] {
 function detectPlatforms(file: FileConfig): Platform[] {
   const platforms: Platform[] = [];
 
-  // 检测 Telegram
-  const telegramToken = process.env.TELEGRAM_BOT_TOKEN ?? file.telegramBotToken;
+  // 从文件配置或环境变量检测各平台
+  // 优先使用新结构 platforms，其次兼容旧版平铺字段
+
+  // Telegram
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN
+    ?? file.platforms?.telegram?.botToken
+    ?? file.telegramBotToken;
   if (telegramToken) {
     platforms.push('telegram');
   }
 
-  // 检测飞书
-  const feishuAppId = process.env.FEISHU_APP_ID ?? file.feishuAppId;
-  const feishuAppSecret = process.env.FEISHU_APP_SECRET ?? file.feishuAppSecret;
+  // 飞书
+  const feishuAppId = process.env.FEISHU_APP_ID
+    ?? file.platforms?.feishu?.appId
+    ?? file.feishuAppId;
+  const feishuAppSecret = process.env.FEISHU_APP_SECRET
+    ?? file.platforms?.feishu?.appSecret
+    ?? file.feishuAppSecret;
   if (feishuAppId && feishuAppSecret) {
     platforms.push('feishu');
   }
 
-  // 检测企业微信
-  const wecomBotId = process.env.WECOM_BOT_ID ?? file.wecomBotId;
-  const wecomBotSecret = process.env.WECOM_BOT_SECRET ?? file.wecomBotSecret;
+  // 企业微信
+  const wecomBotId = process.env.WECOM_BOT_ID
+    ?? file.platforms?.wecom?.botId
+    ?? file.wecomBotId;
+  const wecomBotSecret = process.env.WECOM_BOT_SECRET
+    ?? file.platforms?.wecom?.botSecret
+    ?? file.wecomBotSecret;
   if (wecomBotId && wecomBotSecret) {
     platforms.push('wecom');
+  }
+
+  // 钉钉
+  const dingtalkAppKey = process.env.DINGTALK_APP_KEY
+    ?? file.platforms?.dingtalk?.appKey
+    ?? file.dingtalkAppKey;
+  const dingtalkAppSecret = process.env.DINGTALK_APP_SECRET
+    ?? file.platforms?.dingtalk?.appSecret
+    ?? file.dingtalkAppSecret;
+  const dingtalkAgentId = process.env.DINGTALK_AGENT_ID
+    ?? file.platforms?.dingtalk?.agentId
+    ?? file.dingtalkAgentId;
+  if (dingtalkAppKey && dingtalkAppSecret && dingtalkAgentId) {
+    platforms.push('dingtalk');
   }
 
   // 如果都没配置，抛出错误
@@ -125,7 +206,8 @@ function detectPlatforms(file: FileConfig): Platform[] {
       '至少需要配置一个平台：\n' +
       '  Telegram: 设置 TELEGRAM_BOT_TOKEN\n' +
       '  飞书: 设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET\n' +
-      '  企业微信: 设置 WECOM_BOT_ID 和 WECOM_BOT_SECRET'
+      '  企业微信: 设置 WECOM_BOT_ID 和 WECOM_BOT_SECRET\n' +
+      '  钉钉: 设置 DINGTALK_APP_KEY、DINGTALK_APP_SECRET 和 DINGTALK_AGENT_ID'
     );
   }
 
@@ -134,23 +216,53 @@ function detectPlatforms(file: FileConfig): Platform[] {
 
 export function loadConfig(): Config {
   const file = loadFileConfig();
-  const enabledPlatforms = detectPlatforms(file);
 
-  // 飞书配置
-  const appId = process.env.FEISHU_APP_ID ?? file.feishuAppId ?? '';
-  const appSecret = process.env.FEISHU_APP_SECRET ?? file.feishuAppSecret ?? '';
+  // 构建 platforms 配置（合并环境变量、旧版字段、platforms 对象）
+  const platforms: PlatformsConfig = {};
 
-  // Telegram 配置
-  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? file.telegramBotToken ?? '';
+  // 飞书
+  const feishuAppId = process.env.FEISHU_APP_ID ?? file.platforms?.feishu?.appId ?? file.feishuAppId;
+  const feishuAppSecret = process.env.FEISHU_APP_SECRET ?? file.platforms?.feishu?.appSecret ?? file.feishuAppSecret;
+  if (feishuAppId || feishuAppSecret) {
+    platforms.feishu = {
+      appId: feishuAppId,
+      appSecret: feishuAppSecret,
+      botName: file.platforms?.feishu?.botName ?? file.feishuBotName,
+    };
+  }
 
-  // 企业微信配置
-  const wecomBotId = process.env.WECOM_BOT_ID ?? file.wecomBotId ?? '';
-  const wecomBotSecret = process.env.WECOM_BOT_SECRET ?? file.wecomBotSecret ?? '';
+  // Telegram
+  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? file.platforms?.telegram?.botToken ?? file.telegramBotToken;
+  if (telegramBotToken) {
+    platforms.telegram = {
+      botToken: telegramBotToken,
+      botName: file.platforms?.telegram?.botName ?? file.telegramBotName,
+    };
+  }
 
-  const allowedUserIds =
-    process.env.ALLOWED_USER_IDS !== undefined
-      ? parseCommaSeparated(process.env.ALLOWED_USER_IDS)
-      : file.allowedUserIds ?? [];
+  // 企业微信
+  const wecomBotId = process.env.WECOM_BOT_ID ?? file.platforms?.wecom?.botId ?? file.wecomBotId;
+  const wecomBotSecret = process.env.WECOM_BOT_SECRET ?? file.platforms?.wecom?.botSecret ?? file.wecomBotSecret;
+  if (wecomBotId || wecomBotSecret) {
+    platforms.wecom = {
+      botId: wecomBotId,
+      botSecret: wecomBotSecret,
+      botName: file.platforms?.wecom?.botName ?? file.wecomBotName,
+    };
+  }
+
+  // 钉钉
+  const dingtalkAppKey = process.env.DINGTALK_APP_KEY ?? file.platforms?.dingtalk?.appKey ?? file.dingtalkAppKey;
+  const dingtalkAppSecret = process.env.DINGTALK_APP_SECRET ?? file.platforms?.dingtalk?.appSecret ?? file.dingtalkAppSecret;
+  const dingtalkAgentId = process.env.DINGTALK_AGENT_ID ?? file.platforms?.dingtalk?.agentId ?? file.dingtalkAgentId;
+  if (dingtalkAppKey && dingtalkAppSecret && dingtalkAgentId) {
+    platforms.dingtalk = {
+      appKey: dingtalkAppKey,
+      appSecret: dingtalkAppSecret,
+      agentId: dingtalkAgentId,
+      botName: file.platforms?.dingtalk?.botName,
+    };
+  }
 
   const claudeCliPath = process.env.CLAUDE_CLI_PATH ?? file.claudeCliPath ?? 'claude';
   const claudeWorkDir = process.env.CLAUDE_WORK_DIR ?? file.claudeWorkDir ?? process.cwd();
@@ -212,14 +324,11 @@ export function loadConfig(): Config {
   const logDir = process.env.LOG_DIR ?? file.logDir ?? join(APP_HOME, 'logs');
   const logLevel = (process.env.LOG_LEVEL?.toUpperCase() ?? file.logLevel ?? 'DEBUG') as LogLevel;
 
+  const language = (process.env.CC_IM_LANGUAGE?.toLowerCase() ?? file.language ?? 'zh') as Language;
+
   return {
-    enabledPlatforms,
-    feishuAppId: appId,
-    feishuAppSecret: appSecret,
-    telegramBotToken,
-    wecomBotId,
-    wecomBotSecret,
-    allowedUserIds,
+    platforms,
+    enabledPlatforms: detectPlatforms(file),
     claudeCliPath,
     claudeWorkDir,
     allowedBaseDirs,
@@ -231,9 +340,7 @@ export function loadConfig(): Config {
     logDir,
     logLevel,
     botName: file.botName,
-    wecomBotName: file.wecomBotName,
-    feishuBotName: file.feishuBotName,
-    telegramBotName: file.telegramBotName,
-    startupNotify: file.startupNotify,
+    privileged: mergePrivilegedConfig(file),
+    language,
   };
 }

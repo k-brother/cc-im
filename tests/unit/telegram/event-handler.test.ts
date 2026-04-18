@@ -11,11 +11,15 @@ vi.mock('../../../src/logger.js', () => ({
   }),
 }));
 
-vi.mock('../../../src/access/access-control.js', () => ({
-  AccessControl: vi.fn().mockImplementation(function (this: any, allowedUserIds: string[]) {
-    this.isAllowed = vi.fn((userId: string) => allowedUserIds.length === 0 || allowedUserIds.includes(userId));
-  }),
-}));
+vi.mock('../../../src/access/access-control.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/access/access-control.js')>();
+  return {
+    ...actual,
+    AccessControl: vi.fn().mockImplementation(function (this: unknown, config: any) {
+      return new actual.AccessControl(config);
+    }),
+  };
+});
 
 vi.mock('../../../src/session/session-manager.js', () => ({
   SessionManager: vi.fn().mockImplementation(function (this: any) {
@@ -167,16 +171,18 @@ function createMockBot() {
 
 const mockConfig = {
   enabledPlatforms: ['telegram' as const],
-  feishuAppId: '',
-  feishuAppSecret: '',
-  telegramBotToken: 'test-token',
-  allowedUserIds: [] as string[],
+  platforms: {
+    feishu: { appId: '', appSecret: '' },
+    telegram: { botToken: 'test-token' },
+  },
   claudeCliPath: '/claude',
   claudeWorkDir: '/work',
   allowedBaseDirs: ['/work'],
   claudeSkipPermissions: false,
   claudeTimeoutMs: 300000,
   hookPort: 18900,
+  logDir: '/tmp/logs',
+  logLevel: 'DEBUG' as const,
 };
 
 const mockSessionManager = {
@@ -272,7 +278,16 @@ describe('Telegram Event Handler', () => {
     });
 
     it('未授权用户应该被拒绝', async () => {
-      const restrictedConfig = { ...mockConfig, allowedUserIds: ['allowed-user'] };
+      const restrictedConfig = {
+        ...mockConfig,
+        privileged: {
+          users: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+          approval: {
+            targets: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+            settings: { enabled: false, groupRequired: false, timeoutMs: 300_000, mode: 'any' as const },
+          },
+        },
+      };
       setupTelegramHandlers(mockBot as any, restrictedConfig as any, mockSessionManager as any);
       const handler = mockBot.handlers['text'];
 
@@ -419,7 +434,16 @@ describe('Telegram Event Handler', () => {
     });
 
     it('未授权用户应该被拒绝', async () => {
-      const restrictedConfig = { ...mockConfig, allowedUserIds: ['allowed-user'] };
+      const restrictedConfig = {
+        ...mockConfig,
+        privileged: {
+          users: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+          approval: {
+            targets: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+            settings: { enabled: false, groupRequired: false, timeoutMs: 300_000, mode: 'any' as const },
+          },
+        },
+      };
       setupTelegramHandlers(mockBot as any, restrictedConfig as any, mockSessionManager as any);
       const handler = mockBot.handlers['photo'];
 

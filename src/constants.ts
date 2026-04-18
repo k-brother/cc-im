@@ -1,9 +1,46 @@
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
+import { RiskLevel } from './access/types.js';
 
 /**
  * 系统级常量定义
  */
+
+/**
+ * 命令风险等级映射
+ * L1 低风险：所有用户可直接执行
+ * L2 中风险：群聊中需审批，私聊直接执行
+ * L3 高风险：仅管理员可用
+ */
+export const COMMAND_RISK_LEVELS: Record<string, RiskLevel> = {
+  // === L1 低风险：所有用户可直接执行 ===
+  '/help': RiskLevel.L1,
+  '/new': RiskLevel.L1,
+  '/status': RiskLevel.L1,
+  '/cost': RiskLevel.L1,
+  '/doctor': RiskLevel.L1,
+  '/pwd': RiskLevel.L1,
+  '/list': RiskLevel.L1,
+  '/history': RiskLevel.L1,
+  '/compact': RiskLevel.L1,
+  '/threads': RiskLevel.L1,
+  '/start': RiskLevel.L1,
+  '/stop': RiskLevel.L1,
+  '/chatid': RiskLevel.L1,
+
+  // === L2 中风险：群聊需审批，私聊直接执行 ===
+  '/cd': RiskLevel.L2,
+  '/model': RiskLevel.L2,
+  '/resume': RiskLevel.L2,
+
+  // === L3 高风险：仅管理员可用 ===
+  '/allow': RiskLevel.L3,
+  '/y': RiskLevel.L3,
+  '/deny': RiskLevel.L3,
+  '/n': RiskLevel.L3,
+  '/approve': RiskLevel.L3,
+  '/reject': RiskLevel.L3,
+};
 
 /**
  * 应用数据根目录 ~/.cc-im

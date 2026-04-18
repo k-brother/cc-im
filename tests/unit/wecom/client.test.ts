@@ -32,8 +32,9 @@ describe('wecom client', () => {
   it('should initialize and authenticate', async () => {
     const { initWecom } = await import('../../../src/wecom/client.js');
     const mockConfig = {
-      wecomBotId: 'test-bot-id',
-      wecomBotSecret: 'test-secret',
+      platforms: {
+        wecom: { botId: 'test-bot-id', botSecret: 'test-secret' },
+      },
     } as any;
 
     const mockHandle = { stop: vi.fn(), getRunningTaskCount: vi.fn(() => 0) };

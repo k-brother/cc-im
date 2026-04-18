@@ -2,7 +2,7 @@ import type { Config, Platform } from '../config.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { RequestQueue } from '../queue/request-queue.js';
 import { resolveLatestPermission, getPendingCount } from '../hook/permission-server.js';
-import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
+import { TERMINAL_ONLY_COMMANDS, COMMAND_RISK_LEVELS } from '../constants.js';
 import { readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -10,6 +10,10 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ThreadContext, CostRecord, MessageSender } from '../shared/types.js';
 import { getHistory, formatHistoryPage, getSessionList, formatSessionList } from '../shared/history.js';
+import type { ApprovalManager } from '../access/approval-manager.js';
+import { isUserAllowedForPlatform } from '../access/access-control.js';
+import { RiskLevel } from '../access/types.js';
+import { t } from '../i18n.js';
 
 export type { ThreadContext, CostRecord, MessageSender };
 
@@ -23,7 +27,13 @@ export interface CommandHandlerDeps {
   sender: MessageSender;
   userCosts: Map<string, CostRecord>;
   getRunningTasksSize: () => number;
+  approvalManager?: ApprovalManager;
 }
+
+/**
+ * 获取当前语言的本地化字符串
+ */
+const getLocale = (config: Config) => t(config.language);
 
 /**
  * Claude 请求处理器类型
@@ -45,6 +55,7 @@ export class CommandHandler {
 
   /**
    * 统一命令分发：识别并处理所有命令，返回 true 表示已处理
+   * @param isGroup 是否为群聊
    */
   async dispatch(
     text: string,
@@ -52,30 +63,200 @@ export class CommandHandler {
     userId: string,
     platform: Platform,
     handleClaudeRequest: ClaudeRequestHandler,
+    isGroup: boolean,
     threadCtx?: ThreadContext,
   ): Promise<boolean> {
     const trimmed = text.trim();
+    const cmdName = trimmed.split(/\s+/)[0];
 
-    // 平台特有命令
+    // === 检查用户是否在白名单 ===
+    if (!this.isUserAllowed(userId, platform)) {
+      await this.deps.sender.sendTextReply(chatId, getLocale(this.deps.config).noAccess, threadCtx);
+      return true;
+    }
+
+    // === 平台特有命令 ===
     if (platform === 'telegram' && trimmed === '/start') {
-      await this.deps.sender.sendTextReply(chatId, '欢迎使用 Claude Code Bot!\n\n发送消息与 Claude Code 交互，输入 /help 查看帮助。');
+      await this.deps.sender.sendTextReply(chatId, getLocale(this.deps.config).telegramStart);
       return true;
     }
     if (platform === 'feishu' && trimmed === '/threads') {
       return this.handleThreads(chatId, userId, threadCtx);
     }
 
+    // === 查询命令风险等级 ===
+    const riskLevel = COMMAND_RISK_LEVELS[cmdName] ?? RiskLevel.L1;
+
+    // === L3 高风险命令：仅管理员可用 ===
+    if (riskLevel === RiskLevel.L3) {
+      return this.handleL3Command(trimmed, cmdName, chatId, userId, platform, threadCtx);
+    }
+
+    // === 群聊处理 ===
+    if (isGroup) {
+      return this.handleGroupCommand(trimmed, cmdName, riskLevel, chatId, userId, platform, handleClaudeRequest, threadCtx);
+    }
+
+    // === 私聊：所有命令直接执行 ===
+    return this.executeCommand(trimmed, cmdName, chatId, userId, platform, handleClaudeRequest, threadCtx);
+  }
+
+  /**
+   * 检查用户是否在白名单
+   */
+  private isUserAllowed(userId: string, platform: Platform): boolean {
+    return isUserAllowedForPlatform(this.deps.config, userId, platform);
+  }
+
+  /**
+   * 检查是否为管理员
+   */
+  private isAdmin(userId: string, platform: Platform): boolean {
+    if (!this.deps.approvalManager) return false;
+    return this.deps.approvalManager.isAdmin(userId, platform);
+  }
+
+  /**
+   * 处理 L3 高风险命令
+   */
+  private async handleL3Command(
+    trimmed: string,
+    cmdName: string,
+    chatId: string,
+    userId: string,
+    platform: Platform,
+    threadCtx?: ThreadContext,
+  ): Promise<boolean> {
+    // /allow 和 /deny 是旧版权限系统的 fallback，任何人都可以使用
+    if (cmdName === '/allow' || cmdName === '/y' || cmdName === '/deny' || cmdName === '/n') {
+      return this.handleAllowOrDeny(cmdName, chatId, threadCtx);
+    }
+
+    // /approve 和 /reject 是审批系统命令，仅管理员可用
+    if (!this.isAdmin(userId, platform)) {
+      await this.deps.sender.sendTextReply(chatId, getLocale(this.deps.config).adminOnly, threadCtx);
+      return true;
+    }
+
+    switch (cmdName) {
+      case '/approve':
+        return this.handleApprove(trimmed.slice(8).trim(), chatId, userId, platform, threadCtx);
+      case '/reject':
+        return this.handleReject(trimmed.slice(8).trim(), chatId, userId, platform, threadCtx);
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * 处理 /allow、/y、/deny、/n 命令（权限系统 fallback）
+   */
+  private async handleAllowOrDeny(cmdName: string, chatId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const isAllow = cmdName === '/allow' || cmdName === '/y';
+    const locale = getLocale(this.deps.config);
+    const reqId = resolveLatestPermission(chatId, isAllow ? 'allow' : 'deny');
+    if (reqId) {
+      const remaining = getPendingCount(chatId);
+      const icon = isAllow ? '✅' : '❌';
+      const status = isAllow ? locale.permissionAllowed : locale.permissionDenied;
+      await this.deps.sender.sendTextReply(
+        chatId,
+        `${icon} ${status}${remaining > 0 ? `（还有 ${remaining} 个待确认）` : ''}`,
+        threadCtx,
+      );
+    } else {
+      await this.deps.sender.sendTextReply(chatId, locale.noPendingPermission, threadCtx);
+    }
+    return true;
+  }
+
+  /**
+   * 处理群聊命令
+   */
+  private async handleGroupCommand(
+    trimmed: string,
+    cmdName: string,
+    riskLevel: RiskLevel,
+    chatId: string,
+    userId: string,
+    platform: Platform,
+    handleClaudeRequest: ClaudeRequestHandler,
+    threadCtx?: ThreadContext,
+  ): Promise<boolean> {
+    // L1 低风险：直接执行
+    if (riskLevel === RiskLevel.L1) {
+      return this.executeCommand(trimmed, cmdName, chatId, userId, platform, handleClaudeRequest, threadCtx);
+    }
+
+    // L2 中风险
+    if (riskLevel === RiskLevel.L2) {
+      // 管理员直接执行
+      if (this.isAdmin(userId, platform)) {
+        return this.executeCommand(trimmed, cmdName, chatId, userId, platform, handleClaudeRequest, threadCtx);
+      }
+
+      // 非管理员：创建审批请求
+      if (!this.deps.approvalManager) {
+        await this.deps.sender.sendTextReply(chatId, getLocale(this.deps.config).approvalNotConfigured, threadCtx);
+        return true;
+      }
+
+      const args = trimmed.slice(cmdName.length).trim();
+      const approval = await this.deps.approvalManager.createApproval({
+        requesterId: userId,
+        requesterChatId: chatId,
+        platform,
+        command: cmdName,
+        args,
+        riskLevel,
+        threadCtx,
+      });
+
+      await this.deps.sender.sendTextReply(
+        chatId,
+        `⏳ ${cmdName} ${getLocale(this.deps.config).approvalSubmit}\`${approval.id}\``,
+        threadCtx,
+      );
+      return true;
+    }
+
+    // L3 高风险：群聊中隐藏
+    return true;
+  }
+
+  /**
+   * 执行命令
+   */
+  private async executeCommand(
+    trimmed: string,
+    cmdName: string,
+    chatId: string,
+    userId: string,
+    platform: Platform,
+    handleClaudeRequest: ClaudeRequestHandler,
+    threadCtx?: ThreadContext,
+  ): Promise<boolean> {
+    // 仅终端可用的命令
+    if (TERMINAL_ONLY_COMMANDS.has(cmdName)) {
+      const locale = getLocale(this.deps.config);
+      await this.deps.sender.sendTextReply(
+        chatId,
+        `${cmdName} ${locale.terminalOnlyCommand}`,
+        threadCtx,
+      );
+      return true;
+    }
+
     // 无参数命令
-    if (trimmed === '/help') return this.handleHelp(chatId, platform, threadCtx);
+    if (trimmed === '/help') return this.handleHelp(chatId, platform, false, threadCtx);
     if (trimmed === '/new') return this.handleNew(chatId, userId, threadCtx);
     if (trimmed === '/pwd') return this.handlePwd(chatId, userId, threadCtx);
     if (trimmed === '/list') return this.handleList(chatId, userId, threadCtx);
     if (trimmed === '/cost') return this.handleCost(chatId, userId, threadCtx);
     if (trimmed === '/status') return this.handleStatus(chatId, userId, threadCtx);
     if (trimmed === '/doctor') return this.handleDoctor(chatId, userId, threadCtx);
-    if (trimmed === '/allow' || trimmed === '/y') return this.handleAllow(chatId, threadCtx);
-    if (trimmed === '/deny' || trimmed === '/n') return this.handleDeny(chatId, threadCtx);
     if (trimmed === '/chatid') return this.handleChatId(chatId, threadCtx);
+
     // 带可选参数的命令
     if (trimmed === '/cd' || trimmed.startsWith('/cd ')) {
       return this.handleCd(chatId, userId, trimmed.slice(3).trim(), threadCtx);
@@ -83,61 +264,117 @@ export class CommandHandler {
     if (trimmed === '/model' || trimmed.startsWith('/model ')) {
       return this.handleModel(chatId, userId, trimmed.slice(6).trim(), threadCtx);
     }
-    if (trimmed === '/compact' || trimmed.startsWith('/compact ')) {
-      return this.handleCompact(chatId, userId, trimmed.slice(8).trim(), handleClaudeRequest, threadCtx);
-    }
     if (trimmed === '/history' || trimmed.startsWith('/history ')) {
       return this.handleHistory(chatId, userId, trimmed.slice(8).trim(), threadCtx);
     }
+    if (trimmed === '/compact' || trimmed.startsWith('/compact ')) {
+      return this.handleCompact(chatId, userId, trimmed.slice(8).trim(), handleClaudeRequest, threadCtx);
+    }
     if (trimmed === '/resume' || trimmed.startsWith('/resume ')) {
       return this.handleResume(chatId, userId, trimmed.slice(7).trim(), threadCtx);
-    }
-
-    // 仅终端可用的命令
-    const cmdName = trimmed.split(/\s+/)[0];
-    if (TERMINAL_ONLY_COMMANDS.has(cmdName)) {
-      await this.deps.sender.sendTextReply(
-        chatId,
-        `${cmdName} 命令仅在终端交互模式下可用。\n\n输入 /help 查看可用命令。`,
-        threadCtx,
-      );
-      return true;
     }
 
     return false;
   }
 
   /**
-   * 处理 /help 命令
+   * 处理 /help 命令（差异化输出）
+   * @param isGroup 是否为群聊
    */
-  async handleHelp(chatId: string, platform: Platform, threadCtx?: ThreadContext): Promise<boolean> {
-    const startCmd = platform === 'telegram' ? '/start           - 显示欢迎信息\n' : '';
-    const threadsCmd = platform === 'feishu' ? '/threads        - 列出所有话题会话\n' : '';
-    const stopCmd = platform === 'wecom' ? '/stop           - 停止当前运行的任务\n' : '';
-    const helpText = [
-      '📋 可用命令:',
-      '',
-      startCmd,
-      '/help           - 显示此帮助信息',
-      '/new            - 开始新会话',
-      '/compact [说明]  - 压缩对话上下文（节省 token）',
-      '/cost           - 显示本次会话费用统计',
-      '/status         - 显示 Claude Code 状态信息',
-      '/model [模型名]  - 查看或切换模型',
-      '/doctor         - 检查 Claude Code 健康状态',
-      '/cd <路径>      - 切换工作目录',
-      '/pwd            - 查看当前工作目录',
-      '/list           - 列出所有工作区',
-      '/history [页码]  - 查看当前会话聊天记录',
-      '/resume [序号]   - 浏览/恢复历史会话',
-      threadsCmd,
-      stopCmd,
-      '/allow (/y)     - 允许权限请求（按钮不可用时的备选）',
-      '/deny (/n)      - 拒绝权限请求（按钮不可用时的备选）',
-      '/chatid         - 查看当前会话 ID',
-    ].filter(Boolean).join('\n');
+  async handleHelp(chatId: string, platform: Platform, isGroup: boolean, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
 
-    await this.deps.sender.sendTextReply(chatId, helpText, threadCtx);
+    if (isGroup) {
+      // 群聊帮助（受限）
+      const threadsCmd = platform === 'feishu' ? locale.helpThreadCmd : '';
+      const stopCmd = platform === 'wecom' || platform === 'dingtalk' ? locale.helpStopCmd : '';
+      const helpText = [
+        locale.helpGroupTitle,
+        '',
+        locale.helpL1Direct,
+        locale.helpCommandsL1,
+        threadsCmd,
+        stopCmd,
+        '',
+        locale.helpL2Approval,
+        locale.helpCommandsL2,
+        '',
+        locale.helpGroupNote,
+      ].filter(Boolean).join('\n');
+      await this.deps.sender.sendTextReply(chatId, helpText, threadCtx);
+    } else {
+      // 私聊帮助（完整）
+      const threadsCmd = platform === 'feishu' ? locale.helpThreadCmd : '';
+      const stopCmd = platform === 'wecom' || platform === 'dingtalk' ? locale.helpStopCmd : '';
+      const startCmd = platform === 'telegram' ? locale.helpStartCmd : '';
+      const helpText = [
+        locale.helpPrivateTitle,
+        '',
+        locale.helpL1Direct,
+        locale.helpCommandsL1,
+        locale.helpCompactCmd,
+        threadsCmd,
+        stopCmd,
+        startCmd,
+        '',
+        locale.helpL2Approval,
+        locale.helpCommandsL2,
+        '',
+        locale.helpL3Admin,
+        locale.helpCommandsL3,
+      ].filter(Boolean).join('\n');
+      await this.deps.sender.sendTextReply(chatId, helpText, threadCtx);
+    }
+    return true;
+  }
+
+  /**
+   * 处理 /approve 命令
+   */
+  private async handleApprove(args: string, chatId: string, userId: string, platform: Platform, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
+    const approvalId = args.trim();
+    if (!approvalId) {
+      await this.deps.sender.sendTextReply(chatId, locale.usageApprove, threadCtx);
+      return true;
+    }
+
+    if (!this.deps.approvalManager) {
+      await this.deps.sender.sendTextReply(chatId, locale.approvalNotConfiguredShort, threadCtx);
+      return true;
+    }
+
+    const success = await this.deps.approvalManager.resolve(approvalId, 'approved');
+    if (success) {
+      await this.deps.sender.sendTextReply(chatId, `✅ ${locale.approvalApproved}${approvalId}`, threadCtx);
+    } else {
+      await this.deps.sender.sendTextReply(chatId, `❌ ${locale.approvalFailed}${approvalId} ${locale.approvalNotFound}`, threadCtx);
+    }
+    return true;
+  }
+
+  /**
+   * 处理 /reject 命令
+   */
+  private async handleReject(args: string, chatId: string, userId: string, platform: Platform, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
+    const approvalId = args.trim();
+    if (!approvalId) {
+      await this.deps.sender.sendTextReply(chatId, locale.usageReject, threadCtx);
+      return true;
+    }
+
+    if (!this.deps.approvalManager) {
+      await this.deps.sender.sendTextReply(chatId, locale.approvalNotConfiguredShort, threadCtx);
+      return true;
+    }
+
+    const success = await this.deps.approvalManager.resolve(approvalId, 'denied');
+    if (success) {
+      await this.deps.sender.sendTextReply(chatId, `✅ ${locale.approvalDenied}${approvalId}`, threadCtx);
+    } else {
+      await this.deps.sender.sendTextReply(chatId, `❌ ${locale.rejectFailed}${approvalId} ${locale.approvalNotFound}`, threadCtx);
+    }
     return true;
   }
 
@@ -145,19 +382,20 @@ export class CommandHandler {
    * 处理 /new 命令 - 开始新会话
    */
   async handleNew(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     if (threadCtx) {
       const success = this.deps.sessionManager.newThreadSession(userId, threadCtx.threadId);
       if (success) {
-        await this.deps.sender.sendTextReply(chatId, '✅ 已开始新会话，之前的上下文不会延续。', threadCtx);
+        await this.deps.sender.sendTextReply(chatId, locale.newSessionStarted, threadCtx);
       } else {
-        await this.deps.sender.sendTextReply(chatId, '当前话题没有活动会话。', threadCtx);
+        await this.deps.sender.sendTextReply(chatId, locale.currentNoSession, threadCtx);
       }
     } else {
       const created = this.deps.sessionManager.newSession(userId);
       if (created) {
-        await this.deps.sender.sendTextReply(chatId, '✅ 已开始新会话，之前的上下文不会延续。', threadCtx);
+        await this.deps.sender.sendTextReply(chatId, locale.newSessionStarted, threadCtx);
       } else {
-        await this.deps.sender.sendTextReply(chatId, '当前没有活动会话。', threadCtx);
+        await this.deps.sender.sendTextReply(chatId, locale.newSessionNoActive, threadCtx);
       }
     }
     return true;
@@ -167,16 +405,17 @@ export class CommandHandler {
    * 处理 /cd 命令
    */
   async handleCd(chatId: string, userId: string, args: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     let dir = args.trim();
     if (!dir) {
       const workDir = threadCtx
         ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
         : this.deps.sessionManager.getWorkDir(userId);
       const subdirs = await this.listSubDirs(workDir);
-      const lines = [`当前工作目录: ${workDir}`];
+      const lines = [`${locale.workingDirectory} ${workDir}`];
       if (subdirs.length > 0) {
-        lines.push('', '📁 子目录:', ...subdirs.map(d => `  ${d}/`));
-        lines.push('', '使用 /cd <目录名> 切换');
+        lines.push('', locale.subdirectories, ...subdirs.map(d => `  ${d}/`));
+        lines.push('', locale.useCdToSwitch);
       }
       await this.deps.sender.sendTextReply(chatId, lines.join('\n'), threadCtx);
       return true;
@@ -186,7 +425,7 @@ export class CommandHandler {
       const index = parseInt(dir, 10) - 1;
       const dirs = this.listClaudeProjects();
       if (index < 0 || index >= dirs.length) {
-        await this.deps.sender.sendTextReply(chatId, `无效的序号 ${dir}，请使用 /list 查看可用工作区。`, threadCtx);
+        await this.deps.sender.sendTextReply(chatId, `${locale.invalidIndex} ${dir}，请使用 /list 查看可用工作区。`, threadCtx);
         return true;
       }
       dir = dirs[index];
@@ -195,7 +434,7 @@ export class CommandHandler {
       const resolved = threadCtx
         ? await this.deps.sessionManager.setWorkDirForThread(userId, threadCtx.threadId, dir, threadCtx.rootMessageId)
         : await this.deps.sessionManager.setWorkDir(userId, dir);
-      await this.deps.sender.sendTextReply(chatId, `工作目录已切换到: ${resolved}\n会话已重置。`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `${locale.workdirChanged} ${resolved}${locale.sessionReset}`, threadCtx);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       await this.deps.sender.sendTextReply(chatId, message, threadCtx);
@@ -210,7 +449,7 @@ export class CommandHandler {
     const workDir = threadCtx
       ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
       : this.deps.sessionManager.getWorkDir(userId);
-    await this.deps.sender.sendTextReply(chatId, `当前工作目录: ${workDir}`, threadCtx);
+    await this.deps.sender.sendTextReply(chatId, `${getLocale(this.deps.config).workingDirectory} ${workDir}`, threadCtx);
     return true;
   }
 
@@ -218,15 +457,16 @@ export class CommandHandler {
    * 处理 /list 命令
    */
   async handleList(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const dirs = this.listClaudeProjects();
     if (dirs.length === 0) {
-      await this.deps.sender.sendTextReply(chatId, '未找到 Claude Code 工作区记录。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noProjectRecords, threadCtx);
     } else {
       const current = threadCtx
         ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
         : this.deps.sessionManager.getWorkDir(userId);
       const lines = dirs.map((d, i) => (d === current ? `▶ ${i + 1}. ${d}` : `  ${i + 1}. ${d}`));
-      await this.deps.sender.sendTextReply(chatId, `Claude Code 工作区列表:\n${lines.join('\n')}\n\n使用 /cd <序号> 或 /cd <路径> 切换`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `${locale.projectListTitle}${lines.join('\n')}\n\n${locale.useCdToSwitchPath}`, threadCtx);
     }
     return true;
   }
@@ -235,17 +475,18 @@ export class CommandHandler {
    * 处理 /cost 命令
    */
   async handleCost(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const record = this.deps.userCosts.get(userId);
     if (!record || record.requestCount === 0) {
-      await this.deps.sender.sendTextReply(chatId, '暂无费用记录（本次服务启动后）。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noCostRecord, threadCtx);
     } else {
       const lines = [
-        '💰 费用统计（本次服务启动后）:',
+        locale.costTitle,
         '',
-        `请求次数: ${record.requestCount}`,
-        `总费用: $${record.totalCost.toFixed(4)}`,
-        `总耗时: ${(record.totalDurationMs / 1000).toFixed(1)}s`,
-        `平均每次: $${(record.totalCost / record.requestCount).toFixed(4)}`,
+        `${locale.requests}: ${record.requestCount}`,
+        `${locale.totalCost}: $${record.totalCost.toFixed(4)}`,
+        `${locale.totalDuration}: ${(record.totalDurationMs / 1000).toFixed(1)}s`,
+        `${locale.avgCost}: $${(record.totalCost / record.requestCount).toFixed(4)}`,
       ];
       await this.deps.sender.sendTextReply(chatId, lines.join('\n'), threadCtx);
     }
@@ -256,6 +497,7 @@ export class CommandHandler {
    * 处理 /status 命令
    */
   async handleStatus(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const version = await this.getClaudeVersion();
     const workDir = threadCtx
       ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
@@ -265,14 +507,14 @@ export class CommandHandler {
       : this.deps.sessionManager.getSessionIdForConv(userId, this.deps.sessionManager.getConvId(userId));
     const record = this.deps.userCosts.get(userId);
     const lines = [
-      '📊 Claude Code 状态:',
+      locale.statusTitle,
       '',
-      `版本: ${version}`,
-      `工作目录: ${workDir}`,
-      `会话 ID: ${sessionId ?? '（无）'}`,
-      `跳过权限: ${this.deps.config.claudeSkipPermissions ? '是' : '否'}`,
-      `超时设置: ${this.deps.config.claudeTimeoutMs / 1000}s`,
-      `累计费用: $${record?.totalCost.toFixed(4) ?? '0.0000'}`,
+      `${locale.version}: ${version}`,
+      `${locale.workingDir}: ${workDir}`,
+      `${locale.sessionId}: ${sessionId ?? locale.noSession}`,
+      `${locale.skipPermissions}: ${this.deps.config.claudeSkipPermissions ? 'Yes' : 'No'}`,
+      `${locale.timeout}: ${this.deps.config.claudeTimeoutMs / 1000}s`,
+      `${locale.cumulativeCost}: $${record?.totalCost.toFixed(4) ?? '0.0000'}`,
     ];
     await this.deps.sender.sendTextReply(chatId, lines.join('\n'), threadCtx);
     return true;
@@ -282,8 +524,6 @@ export class CommandHandler {
    * 验证模型名称是否合法
    */
   private isValidModelName(name: string): boolean {
-    // 允许字母、数字、点、连字符、斜杠，最长 100 字符
-    // 不允许连续斜杠、开头/结尾斜杠
     if (!/^[a-zA-Z0-9.\-/]{1,100}$/.test(name)) return false;
     if (name.includes('//')) return false;
     if (name.startsWith('/') || name.endsWith('/')) return false;
@@ -294,28 +534,24 @@ export class CommandHandler {
    * 处理 /model 命令
    */
   async handleModel(chatId: string, userId: string, args: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const modelArg = args.trim();
     const threadId = threadCtx?.threadId;
     if (!modelArg) {
       const currentModel = this.deps.sessionManager.getModel(userId, threadId);
-      const scope = threadId ? '当前话题' : '当前';
       await this.deps.sender.sendTextReply(
         chatId,
-        `${scope}模型: ${currentModel ?? this.deps.config.claudeModel ?? '默认 (由 Claude Code 决定)'}\n\n可选模型: sonnet, opus, haiku 或完整模型名\n用法: /model <模型名>`,
+        `${locale.currentModel} ${currentModel ?? this.deps.config.claudeModel ?? locale.defaultModel}\n\n${locale.usageModel}`,
         threadCtx,
       );
     } else {
       if (!this.isValidModelName(modelArg)) {
-        await this.deps.sender.sendTextReply(
-          chatId,
-          '❌ 无效的模型名称。模型名只能包含字母、数字、点、连字符和斜杠，且长度不超过 100 字符。',
-          threadCtx,
-        );
+        await this.deps.sender.sendTextReply(chatId, locale.invalidModelName, threadCtx);
         return true;
       }
       this.deps.sessionManager.setModel(userId, modelArg, threadId);
       const scope = threadId ? '当前话题' : '';
-      await this.deps.sender.sendTextReply(chatId, `${scope}模型已切换为: ${modelArg}\n后续对话将使用此模型。`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `${locale.modelChanged}${modelArg}\n后续对话将使用此模型。`, threadCtx);
     }
     return true;
   }
@@ -324,18 +560,19 @@ export class CommandHandler {
    * 处理 /doctor 命令
    */
   async handleDoctor(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const version = await this.getClaudeVersion();
     const workDir = threadCtx
       ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
       : this.deps.sessionManager.getWorkDir(userId);
     const lines = [
-      '🏥 Claude Code 健康检查:',
+      locale.doctorTitle,
       '',
-      `CLI 路径: ${this.deps.config.claudeCliPath}`,
-      `版本: ${version}`,
-      `工作目录: ${workDir}`,
-      `允许的基础目录: ${this.deps.config.allowedBaseDirs.join(', ')}`,
-      `活跃任务数: ${this.deps.getRunningTasksSize()}`,
+      `${locale.cliPath}: ${this.deps.config.claudeCliPath}`,
+      `${locale.version}: ${version}`,
+      `${locale.workingDir}: ${workDir}`,
+      `${locale.allowedDirs}: ${this.deps.config.allowedBaseDirs.join(', ')}`,
+      `${locale.activeTasks}: ${this.deps.getRunningTasksSize()}`,
     ];
     await this.deps.sender.sendTextReply(chatId, lines.join('\n'), threadCtx);
     return true;
@@ -344,18 +581,13 @@ export class CommandHandler {
   /**
    * 处理 /compact 命令
    */
-  async handleCompact(
-    chatId: string,
-    userId: string,
-    args: string,
-    handleClaudeRequest: ClaudeRequestHandler,
-    threadCtx?: ThreadContext,
-  ): Promise<boolean> {
+  async handleCompact(chatId: string, userId: string, args: string, handleClaudeRequest: ClaudeRequestHandler, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const sessionId = threadCtx
       ? this.deps.sessionManager.getSessionIdForThread(userId, threadCtx.threadId)
       : this.deps.sessionManager.getSessionIdForConv(userId, this.deps.sessionManager.getConvId(userId));
     if (!sessionId) {
-      await this.deps.sender.sendTextReply(chatId, '当前没有活动会话，无需压缩。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noActiveSession, threadCtx);
       return true;
     }
     const instructions = args.trim();
@@ -371,24 +603,24 @@ export class CommandHandler {
       await handleClaudeRequest(userId, chatId, prompt, workDir, undefined, threadCtx);
     });
     if (enqueueResult === 'rejected') {
-      await this.deps.sender.sendTextReply(chatId, '请求队列已满，请等待当前任务完成后再试。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.queueFull, threadCtx);
     } else if (enqueueResult === 'queued') {
-      await this.deps.sender.sendTextReply(chatId, '前面还有任务在处理中，压缩请求已排队等待。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.compactQueued, threadCtx);
     }
     return true;
   }
-
 
   /**
    * 处理 /allow 或 /y 命令（按钮不可用时的 fallback）
    */
   async handleAllow(chatId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const reqId = resolveLatestPermission(chatId, 'allow');
     if (reqId) {
       const remaining = getPendingCount(chatId);
-      await this.deps.sender.sendTextReply(chatId, `✅ 权限已允许${remaining > 0 ? `（还有 ${remaining} 个待确认）` : ''}`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `✅ ${locale.permissionAllowed}${remaining > 0 ? `（还有 ${remaining} 个待确认）` : ''}`, threadCtx);
     } else {
-      await this.deps.sender.sendTextReply(chatId, 'ℹ️ 没有待确认的权限请求', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noPendingPermission, threadCtx);
     }
     return true;
   }
@@ -397,12 +629,13 @@ export class CommandHandler {
    * 处理 /deny 或 /n 命令（按钮不可用时的 fallback）
    */
   async handleDeny(chatId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const reqId = resolveLatestPermission(chatId, 'deny');
     if (reqId) {
       const remaining = getPendingCount(chatId);
-      await this.deps.sender.sendTextReply(chatId, `❌ 权限已拒绝${remaining > 0 ? `（还有 ${remaining} 个待确认）` : ''}`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `❌ ${locale.permissionDenied}${remaining > 0 ? `（还有 ${remaining} 个待确认）` : ''}`, threadCtx);
     } else {
-      await this.deps.sender.sendTextReply(chatId, 'ℹ️ 没有待确认的权限请求', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noPendingPermission, threadCtx);
     }
     return true;
   }
@@ -441,6 +674,7 @@ export class CommandHandler {
    * 处理 /resume 命令 - 浏览/恢复历史会话
    */
   async handleResume(chatId: string, userId: string, args: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const workDir = threadCtx
       ? this.deps.sessionManager.getWorkDirForThread(userId, threadCtx.threadId)
       : this.deps.sessionManager.getWorkDir(userId);
@@ -461,18 +695,18 @@ export class CommandHandler {
 
     const index = parseInt(args, 10) - 1;
     if (isNaN(index) || index < 0 || index >= listResult.data.length) {
-      await this.deps.sender.sendTextReply(chatId, `无效的序号 ${args}，共 ${listResult.data.length} 个会话。`, threadCtx);
+      await this.deps.sender.sendTextReply(chatId, `${locale.invalidIndex} ${args}，共 ${listResult.data.length} 个会话。`, threadCtx);
       return true;
     }
 
     const target = listResult.data[index];
     if (target.isCurrent) {
-      await this.deps.sender.sendTextReply(chatId, '该会话已是当前会话。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.sessionAlreadyCurrent, threadCtx);
       return true;
     }
 
     this.deps.sessionManager.resumeSession(userId, target.sessionId);
-    await this.deps.sender.sendTextReply(chatId, `已恢复会话: ${target.preview}\n后续消息将延续该会话上下文。`, threadCtx);
+    await this.deps.sender.sendTextReply(chatId, `${locale.sessionResumed}${target.preview}${locale.sessionResumedSuffix}`, threadCtx);
     return true;
   }
 
@@ -480,9 +714,10 @@ export class CommandHandler {
    * 处理 /threads 命令 - 列出所有话题会话
    */
   async handleThreads(chatId: string, userId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const locale = getLocale(this.deps.config);
     const threads = this.deps.sessionManager.listThreads(userId);
     if (threads.length === 0) {
-      await this.deps.sender.sendTextReply(chatId, '暂无话题会话记录。', threadCtx);
+      await this.deps.sender.sendTextReply(chatId, locale.noThreads, threadCtx);
     } else {
       const lines = threads.map((t, i) => {
         const sessionStatus = t.sessionId ? '✓' : '✗';
@@ -491,7 +726,7 @@ export class CommandHandler {
       });
       await this.deps.sender.sendTextReply(
         chatId,
-        `📋 话题会话列表 (${threads.length}):\n\n${lines.join('\n')}\n\n✓ = 有活跃会话 | ✗ = 无会话`,
+        `${locale.threadListTitle}${threads.length}):\n\n${lines.join('\n')}${locale.threadListSuffix}`,
         threadCtx,
       );
     }

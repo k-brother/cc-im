@@ -17,6 +17,8 @@ import { setActiveChatId } from '../shared/active-chats.js';
 import { createLogger } from '../logger.js';
 import type { TextMessage, ImageMessage, MixedMessage, VoiceMessage } from '@wecom/aibot-node-sdk';
 import type { EventMessageWith, TemplateCardEventData } from '@wecom/aibot-node-sdk';
+import { ApprovalManager, shouldEnableApprovalManager } from '../access/approval-manager.js';
+import { WecomApprovalSender } from './approval-sender.js';
 
 const log = createLogger('WecomHandler');
 
@@ -65,7 +67,7 @@ export function setupWecomHandlers(
   config: Config,
   sessionManager: SessionManager,
 ): WecomEventHandlerHandle {
-  const accessControl = new AccessControl(config.allowedUserIds);
+  const accessControl = new AccessControl(config);
   const requestQueue = new RequestQueue();
   const userCosts = new Map<string, CostRecord>();
   const runningTasks = new Map<string, TaskRunState>();
@@ -77,6 +79,12 @@ export function setupWecomHandlers(
   let accepting = true;
   let taskCounter = 0;
 
+  // 创建审批管理器
+  const approvalSender = new WecomApprovalSender(wsClient);
+  const approvalManager = config.privileged && shouldEnableApprovalManager(config.privileged)
+    ? new ApprovalManager(config.privileged, new Map([['wecom', approvalSender]]))
+    : undefined;
+
   const commandHandler = new CommandHandler({
     config,
     sessionManager,
@@ -84,6 +92,7 @@ export function setupWecomHandlers(
     sender: { sendTextReply: (chatId, text) => sender.sendTextReply(chatId, text) },
     userCosts,
     getRunningTasksSize: () => runningTasks.size,
+    approvalManager,
   });
 
   // 注册权限发送器
@@ -241,7 +250,7 @@ export function setupWecomHandlers(
       return false;
     }
 
-    if (!accessControl.isAllowed(userId)) {
+    if (!accessControl.isAllowed(userId, 'wecom')) {
       log.warn(`Access denied for user ${userId}. Add to ALLOWED_USER_IDS to grant access.`);
       await sender.sendTextReply(chatId, '抱歉，您没有访问权限。\n\n请联系管理员将您的用户 ID 添加到白名单。\n您的 ID: ' + userId);
       return false;
@@ -296,7 +305,7 @@ export function setupWecomHandlers(
     }
 
     // 统一命令分发
-    if (await commandHandler.dispatch(cleanText, chatId, userId, 'wecom', handleClaudeRequest)) {
+    if (await commandHandler.dispatch(cleanText, chatId, userId, 'wecom', handleClaudeRequest, isGroup)) {
       return;
     }
 

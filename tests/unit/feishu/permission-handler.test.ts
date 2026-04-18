@@ -55,6 +55,7 @@ describe('permission-handler', () => {
       const registeredSender = vi.mocked(registerPermissionSender).mock.calls[0][1];
       await registeredSender.updatePermissionCard({
         messageId: 'msg-001',
+        chatId: 'chat-001',
         toolName: 'Bash',
         decision: 'allow',
       });
@@ -77,7 +78,7 @@ describe('permission-handler', () => {
     });
 
     it('请求不存在时应记录警告但不抛出异常', () => {
-      vi.mocked(resolvePermissionById).mockReturnValue(undefined);
+      vi.mocked(resolvePermissionById).mockReturnValue(null);
       expect(() => {
         handlePermissionAction('req-nonexistent', 'allow');
       }).not.toThrow();

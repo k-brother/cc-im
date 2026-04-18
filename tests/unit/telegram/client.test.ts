@@ -28,9 +28,11 @@ import { getBot, initTelegram, stopTelegram } from '../../../src/telegram/client
 import type { Config } from '../../../src/config.js';
 
 const baseConfig = {
-  telegramBotToken: 'test-token',
+  platforms: {
+    telegram: { botToken: 'test-token' },
+  },
   enabledPlatforms: ['telegram'],
-} as Config;
+} as unknown as Config;
 
 describe('telegram/client', () => {
   beforeEach(() => {

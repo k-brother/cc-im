@@ -5,8 +5,17 @@ import { generateReqId } from '@wecom/aibot-node-sdk';
 import { createLogger } from '../logger.js';
 import { splitLongContent, buildInputSummary } from '../shared/utils.js';
 import { MAX_WECOM_MESSAGE_LENGTH, WECOM_STREAM_TIMEOUT_MS } from '../constants.js';
+import { t, type Language } from '../i18n.js';
+import { loadConfig } from '../config.js';
 
 const log = createLogger('WecomSender');
+
+// Lazy-load config to avoid circular dependency
+let _config: ReturnType<typeof loadConfig> | null = null;
+function getLang(): Language {
+  if (!_config) _config = loadConfig();
+  return _config.language;
+}
 
 export type { WsFrame };
 
@@ -78,12 +87,13 @@ export function createWecomSender(wsClient: WSClient): WecomSender {
 
   /** 构建停止按钮模板卡片 */
   function buildStopCard(taskKey: string) {
+    const locale = t(getLang());
     return {
       card_type: 'button_interaction' as const,
       main_title: { title: 'Claude Code' },
       task_id: `stop_${taskKey}`,
       button_list: [
-        { text: '⏹️ 停止', style: 3, key: `stop_${taskKey}` },
+        { text: locale.stopButton, style: 3, key: `stop_${taskKey}` },
       ],
     };
   }
@@ -284,7 +294,8 @@ export function createWecomSender(wsClient: WSClient): WecomSender {
       await waitForStreamIdle();
       streamBusy = true;
 
-      const text = `❌ 错误\n\n${error}`;
+      const locale = t(getLang());
+      const text = `❌ ${locale.errorPrefix}\n\n${error}`;
       try {
         await wsClient.replyStream(session.frame, session.streamId, text, true);
       } catch (err) {
@@ -311,18 +322,19 @@ export function createWecomSender(wsClient: WSClient): WecomSender {
     },
 
     async sendPermissionCard(chatId: string, requestId: string, toolName: string, toolInput: Record<string, unknown>): Promise<string> {
+      const locale = t(getLang());
       const inputSummary = buildInputSummary(toolName, toolInput);
       try {
         await wsClient.sendMessage(chatId, {
           msgtype: 'template_card',
           template_card: {
             card_type: 'button_interaction',
-            main_title: { title: `🔐 权限确认 - ${toolName}` },
+            main_title: { title: `${locale.permissionCardTitle}${toolName}` },
             sub_title_text: inputSummary.length > 200 ? inputSummary.slice(0, 200) + '...' : inputSummary,
             task_id: `perm_${requestId}`,
             button_list: [
-              { text: '✅ 允许', style: 1, key: `perm_allow_${requestId}` },
-              { text: '❌ 拒绝', style: 3, key: `perm_deny_${requestId}` },
+              { text: locale.allowButton, style: 1, key: `perm_allow_${requestId}` },
+              { text: locale.denyButton, style: 3, key: `perm_deny_${requestId}` },
             ],
           },
         });

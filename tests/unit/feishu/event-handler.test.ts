@@ -20,11 +20,15 @@ vi.mock('../../../src/logger.js', () => ({
   }),
 }));
 
-vi.mock('../../../src/access/access-control.js', () => ({
-  AccessControl: vi.fn().mockImplementation(function (this: any, allowedUserIds: string[]) {
-    this.isAllowed = vi.fn((userId: string) => allowedUserIds.length === 0 || allowedUserIds.includes(userId));
-  }),
-}));
+vi.mock('../../../src/access/access-control.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/access/access-control.js')>();
+  return {
+    ...actual,
+    AccessControl: vi.fn().mockImplementation(function (this: unknown, config: any) {
+      return new actual.AccessControl(config);
+    }),
+  };
+});
 
 vi.mock('../../../src/session/session-manager.js', () => ({
   SessionManager: vi.fn().mockImplementation(function (this: any) {
@@ -266,16 +270,18 @@ import { handlePermissionAction } from '../../../src/feishu/permission-handler.j
 describe('Event Handler', () => {
   const mockConfig = {
     enabledPlatforms: ['feishu' as const],
-    feishuAppId: 'test-app-id',
-    feishuAppSecret: 'test-secret',
-    telegramBotToken: '',
-    allowedUserIds: [],
+    platforms: {
+      feishu: { appId: 'test-app-id', appSecret: 'test-secret' },
+      telegram: { botToken: '' },
+    },
     claudeCliPath: '/claude',
     claudeWorkDir: '/work',
     allowedBaseDirs: ['/work'],
     claudeSkipPermissions: false,
     claudeTimeoutMs: 300000,
     hookPort: 18900,
+    logDir: '/tmp/logs',
+    logLevel: 'DEBUG' as const,
   };
 
   const threadSessionsMap = new Map<string, any>();
@@ -388,7 +394,7 @@ describe('Event Handler', () => {
     expect(messageSender.sendTextReply).toHaveBeenCalledWith(
       'chat-123',
       expect.stringContaining('仅在终端交互模式下可用'),
-      undefined,
+      false,
     );
   });
 
@@ -497,7 +503,13 @@ describe('Event Handler', () => {
   it('访问控制应该拦截未授权用户', async () => {
     const restrictedConfig = {
       ...mockConfig,
-      allowedUserIds: ['allowed-user'],
+      privileged: {
+        users: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+        approval: {
+          targets: { feishu: [], telegram: [], wecom: [], dingtalk: [] },
+          settings: { enabled: false, groupRequired: false, timeoutMs: 300_000, mode: 'any' as const },
+        },
+      },
     };
     createEventDispatcher(restrictedConfig, mockSessionManager as any);
 

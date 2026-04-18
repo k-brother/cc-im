@@ -18,9 +18,13 @@ export function getBotOpenId(): string | undefined {
 }
 
 export async function initFeishu(config: Config, eventDispatcher: Lark.EventDispatcher) {
+  const feishuConfig = config.platforms.feishu;
+  if (!feishuConfig?.appId || !feishuConfig?.appSecret) {
+    throw new Error('Feishu platform not configured');
+  }
   const baseConfig = {
-    appId: config.feishuAppId,
-    appSecret: config.feishuAppSecret,
+    appId: feishuConfig.appId,
+    appSecret: feishuConfig.appSecret,
   };
 
   client = new Lark.Client(baseConfig);

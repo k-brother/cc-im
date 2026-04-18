@@ -17,6 +17,8 @@ import { MessageDedup } from '../shared/message-dedup.js';
 import { THROTTLE_MS, IMAGE_DIR } from '../constants.js';
 import { setActiveChatId } from '../shared/active-chats.js';
 import { createLogger } from '../logger.js';
+import { ApprovalManager, shouldEnableApprovalManager } from '../access/approval-manager.js';
+import { TelegramApprovalSender } from './approval-sender.js';
 
 const log = createLogger('TgHandler');
 
@@ -37,7 +39,7 @@ export interface TelegramEventHandlerHandle {
 }
 
 export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionManager: SessionManager): TelegramEventHandlerHandle {
-  const accessControl = new AccessControl(config.allowedUserIds);
+  const accessControl = new AccessControl(config);
   const requestQueue = new RequestQueue();
 
   const userCosts = new Map<string, CostRecord>();
@@ -45,6 +47,12 @@ export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionMana
   const runningTasks = new Map<string, TaskInfo>();
   const stopTaskCleanup = startTaskCleanup(runningTasks);
   const dedup = new MessageDedup();
+
+  // 创建审批管理器
+  const approvalSender = new TelegramApprovalSender(bot);
+  const approvalManager = config.privileged && shouldEnableApprovalManager(config.privileged)
+    ? new ApprovalManager(config.privileged, new Map([['telegram', approvalSender]]))
+    : undefined;
 
   // Create command handler with dependencies
   const commandHandler = new CommandHandler({
@@ -54,6 +62,7 @@ export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionMana
     sender: { sendTextReply },
     userCosts,
     getRunningTasksSize: () => runningTasks.size,
+    approvalManager,
   });
 
   // Register telegram permission sender
@@ -211,7 +220,7 @@ export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionMana
     }
 
     // Access control
-    if (!accessControl.isAllowed(userId)) {
+    if (!accessControl.isAllowed(userId, 'telegram')) {
       log.warn(`Access denied for user ${userId}. Add to ALLOWED_USER_IDS to grant access.`);
       await sendTextReply(chatId, '抱歉，您没有访问权限。\n\n请联系管理员将您的 Telegram ID 添加到白名单。\n您的 ID: ' + userId);
       return;
@@ -223,7 +232,7 @@ export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionMana
     log.debug(`Processing message from authorized user ${userId}: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
 
     // 统一命令分发
-    if (await commandHandler.dispatch(text, chatId, userId, 'telegram', handleClaudeRequest)) {
+    if (await commandHandler.dispatch(text, chatId, userId, 'telegram', handleClaudeRequest, isGroup)) {
       return;
     }
 
@@ -269,7 +278,7 @@ export function setupTelegramHandlers(bot: Telegraf, config: Config, sessionMana
     if (dedup.isDuplicate(`${chatId}:${messageId}`)) return;
 
     // Access control
-    if (!accessControl.isAllowed(userId)) {
+    if (!accessControl.isAllowed(userId, 'telegram')) {
       await sendTextReply(chatId, '抱歉，您没有访问权限。\n\n请联系管理员将您的 Telegram ID 添加到白名单。\n您的 ID: ' + userId);
       return;
     }

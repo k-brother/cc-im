@@ -25,7 +25,6 @@ vi.mock('node:child_process', () => ({
   execFileSync: (...args: unknown[]) => mockExecFileSync(...args),
 }));
 
-// Reset modules before each test so loadConfig() reads fresh env
 beforeEach(() => {
   vi.resetModules();
   mockReadFileSync.mockReset();
@@ -36,7 +35,6 @@ beforeEach(() => {
 const savedEnv = { ...process.env };
 
 afterEach(() => {
-  // Restore env
   for (const key of Object.keys(process.env)) {
     if (!(key in savedEnv)) delete process.env[key];
   }
@@ -44,7 +42,6 @@ afterEach(() => {
 });
 
 function setEnv(overrides: Record<string, string>) {
-  // Clear platform-related env to start clean
   delete process.env.FEISHU_APP_ID;
   delete process.env.FEISHU_APP_SECRET;
   delete process.env.TELEGRAM_BOT_TOKEN;
@@ -80,8 +77,8 @@ describe('loadConfig', () => {
 
     const config = await loadConfigFresh();
     expect(config.enabledPlatforms).toContain('feishu');
-    expect(config.feishuAppId).toBe('app123');
-    expect(config.feishuAppSecret).toBe('secret456');
+    expect(config.platforms.feishu?.appId).toBe('app123');
+    expect(config.platforms.feishu?.appSecret).toBe('secret456');
   });
 
   it('从环境变量加载 Telegram 配置', async () => {
@@ -94,7 +91,7 @@ describe('loadConfig', () => {
 
     const config = await loadConfigFresh();
     expect(config.enabledPlatforms).toContain('telegram');
-    expect(config.telegramBotToken).toBe('bot-token-123');
+    expect(config.platforms.telegram?.botToken).toBe('bot-token-123');
   });
 
   it('同时启用多个平台', async () => {
@@ -119,7 +116,20 @@ describe('loadConfig', () => {
     await expect(loadConfigFresh()).rejects.toThrow('至少需要配置一个平台');
   });
 
-  it('从配置文件加载', async () => {
+  it('从配置文件加载（新结构 platforms）', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      platforms: {
+        feishu: { appId: 'file-app-id', appSecret: 'file-secret' },
+      },
+    }));
+    mockExecFileSync.mockReturnValue(Buffer.from('/usr/bin/claude'));
+    setEnv({ CLAUDE_CLI_PATH: 'claude' });
+
+    const config = await loadConfigFresh();
+    expect(config.platforms.feishu?.appId).toBe('file-app-id');
+  });
+
+  it('从配置文件加载（兼容旧版平铺字段）', async () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({
       feishuAppId: 'file-app-id',
       feishuAppSecret: 'file-secret',
@@ -128,13 +138,14 @@ describe('loadConfig', () => {
     setEnv({ CLAUDE_CLI_PATH: 'claude' });
 
     const config = await loadConfigFresh();
-    expect(config.feishuAppId).toBe('file-app-id');
+    expect(config.platforms.feishu?.appId).toBe('file-app-id');
   });
 
   it('环境变量优先于配置文件', async () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({
-      feishuAppId: 'file-app-id',
-      feishuAppSecret: 'file-secret',
+      platforms: {
+        feishu: { appId: 'file-app-id', appSecret: 'file-secret' },
+      },
     }));
     mockExecFileSync.mockReturnValue(Buffer.from('/usr/bin/claude'));
     setEnv({
@@ -144,7 +155,7 @@ describe('loadConfig', () => {
     });
 
     const config = await loadConfigFresh();
-    expect(config.feishuAppId).toBe('env-app-id');
+    expect(config.platforms.feishu?.appId).toBe('env-app-id');
   });
 
   it('配置文件 JSON 格式错误时回退到环境变量', async () => {
@@ -156,20 +167,7 @@ describe('loadConfig', () => {
     });
 
     const config = await loadConfigFresh();
-    expect(config.telegramBotToken).toBe('token');
-  });
-
-  it('解析 ALLOWED_USER_IDS 逗号分隔列表', async () => {
-    mockReadFileSync.mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); });
-    mockExecFileSync.mockReturnValue(Buffer.from('/usr/bin/claude'));
-    setEnv({
-      TELEGRAM_BOT_TOKEN: 'token',
-      CLAUDE_CLI_PATH: 'claude',
-      ALLOWED_USER_IDS: 'user1, user2, user3',
-    });
-
-    const config = await loadConfigFresh();
-    expect(config.allowedUserIds).toEqual(['user1', 'user2', 'user3']);
+    expect(config.platforms.telegram?.botToken).toBe('token');
   });
 
   it('CLAUDE_SKIP_PERMISSIONS 解析为布尔值', async () => {
@@ -256,7 +254,7 @@ describe('loadConfig', () => {
 
     // Should not throw, just warn and use env
     const config = await loadConfigFresh();
-    expect(config.telegramBotToken).toBe('token');
+    expect(config.platforms.telegram?.botToken).toBe('token');
   });
 });
 
@@ -271,8 +269,8 @@ describe('wecom platform detection', () => {
     });
     const config = await loadConfigFresh();
     expect(config.enabledPlatforms).toContain('wecom');
-    expect(config.wecomBotId).toBe('test-bot-id');
-    expect(config.wecomBotSecret).toBe('test-bot-secret');
+    expect(config.platforms.wecom?.botId).toBe('test-bot-id');
+    expect(config.platforms.wecom?.botSecret).toBe('test-bot-secret');
   });
 
   it('should not detect wecom when only WECOM_BOT_ID is set', async () => {

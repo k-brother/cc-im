@@ -23,11 +23,15 @@ export async function initWecom(
   config: Config,
   setupHandlers: (client: WSClient) => WecomEventHandlerHandle,
 ): Promise<{ wsClient: WSClient; handle: WecomEventHandlerHandle }> {
+  const wecomConfig = config.platforms.wecom;
+  if (!wecomConfig?.botId || !wecomConfig?.botSecret) {
+    throw new Error('WeCom platform not configured');
+  }
   log.info('Initializing WeChat Work (WeCom) bot...');
 
   const client = new AiBot.WSClient({
-    botId: config.wecomBotId,
-    secret: config.wecomBotSecret,
+    botId: wecomConfig.botId,
+    secret: wecomConfig.botSecret,
     maxReconnectAttempts: -1, // 无限重连
     logger: {
       debug: (msg: string, ...args: any[]) => log.debug(`[SDK] ${msg}`, ...args),

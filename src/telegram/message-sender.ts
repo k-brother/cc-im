@@ -4,8 +4,17 @@ import { createLogger } from '../logger.js';
 import { splitLongContent, buildInputSummary, truncateText } from '../shared/utils.js';
 import { MAX_TELEGRAM_MESSAGE_LENGTH } from '../constants.js';
 import { withRetry } from '../shared/retry.js';
+import { t, type Language } from '../i18n.js';
+import { loadConfig } from '../config.js';
 
 const log = createLogger('TgSender');
+
+// Lazy-load config to avoid circular dependency
+let _config: ReturnType<typeof loadConfig> | null = null;
+function getLang(): Language {
+  if (!_config) _config = loadConfig();
+  return _config.language;
+}
 
 const MAX_RETRIES = 3;
 const RATE_LIMIT_MAX_WAIT_SEC = 60; // Cap retry wait time to avoid excessive blocking
@@ -93,16 +102,17 @@ const STATUS_ICONS: Record<MessageStatus, string> = {
   error: '🔴',
 };
 
-const STATUS_TITLES: Record<MessageStatus, string> = {
-  thinking: 'Claude Code - 思考中...',
-  streaming: 'Claude Code',
-  done: 'Claude Code',
-  error: 'Claude Code - 错误',
-};
-
 function formatMessage(content: string, status: MessageStatus, note?: string): string {
   const icon = STATUS_ICONS[status];
-  const title = STATUS_TITLES[status];
+  const locale = t(getLang());
+  const titleMap: Record<MessageStatus, string> = {
+    processing: locale.cardStatusProcessing,
+    thinking: locale.cardStatusThinking,
+    streaming: locale.cardStatusStreaming,
+    done: locale.cardStatusDone,
+    error: locale.cardStatusError,
+  };
+  const title = titleMap[status];
   let text = `${icon} ${title}\n\n${truncateForMessage(content)}`;
   if (note) {
     text += `\n\n─────────\n${note}`;
@@ -117,7 +127,7 @@ function truncateForMessage(text: string): string {
 function buildStopKeyboard(messageId: number) {
   return {
     inline_keyboard: [[
-      { text: '⏹️ 停止', callback_data: `stop_${messageId}` },
+      { text: t(getLang()).stopButton, callback_data: `stop_${messageId}` },
     ]],
   };
 }
@@ -132,10 +142,11 @@ export async function sendThinkingMessage(chatId: string, replyToMessageId?: str
   }
 
   // Use retry for initial message to ensure delivery
+  const locale = t(getLang());
   const msg = await callWithRetry(chatId, 'sendThinkingMessage', () =>
     bot.telegram.sendMessage(
       numericChatId,
-      formatMessage('正在思考...', 'thinking', '请稍候'),
+      formatMessage(locale.thinking, 'thinking', locale.waitPlease),
       extra,
     ),
   );
@@ -145,7 +156,7 @@ export async function sendThinkingMessage(chatId: string, replyToMessageId?: str
     numericChatId,
     msg.message_id,
     undefined,
-    formatMessage('正在思考...', 'thinking', '请稍候'),
+    formatMessage(locale.thinking, 'thinking', locale.waitPlease),
     { reply_markup: buildStopKeyboard(msg.message_id) },
   );
   return String(msg.message_id);
@@ -265,13 +276,14 @@ export async function sendPermissionMessage(
   toolInput: Record<string, unknown>,
 ): Promise<string> {
   const bot = getBot();
+  const locale = t(getLang());
 
   const inputSummary = buildInputSummary(toolName, toolInput);
-  const text = `🔐 权限确认 - ${toolName}\n\n${truncateForMessage(inputSummary)}`;
+  const text = `${locale.permissionCardTitle}${toolName}\n\n${truncateForMessage(inputSummary)}`;
   const reply_markup = {
     inline_keyboard: [[
-      { text: '✅ 允许', callback_data: `perm_allow_${requestId}` },
-      { text: '❌ 拒绝', callback_data: `perm_deny_${requestId}` },
+      { text: locale.allowButton, callback_data: `perm_allow_${requestId}` },
+      { text: locale.denyButton, callback_data: `perm_deny_${requestId}` },
     ]],
   };
 
@@ -283,9 +295,9 @@ export async function sendPermissionMessage(
 
 export async function updatePermissionMessage(chatId: string, messageId: string, toolName: string, decision: 'allow' | 'deny') {
   const bot = getBot();
+  const locale = t(getLang());
   const isAllowed = decision === 'allow';
-  const icon = isAllowed ? '✅' : '❌';
-  const text = `🔐 ${toolName} - ${isAllowed ? '已允许 ✓' : '已拒绝 ✗'}\n\n${icon} ${isAllowed ? '操作已允许执行。' : '操作已被拒绝。'}`;
+  const text = `${locale.permissionCardTitle}${toolName} - ${isAllowed ? locale.permissionAllowedStatus : locale.permissionDeniedStatus}\n\n${isAllowed ? locale.permissionAllowedText : locale.permissionDeniedText}`;
 
   try {
     await callWithRetry(chatId, 'updatePermissionMessage', () =>

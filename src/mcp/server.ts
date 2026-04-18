@@ -11,6 +11,8 @@ import type { Message } from './router.js';
 import { createLogger } from '../logger.js';
 import { router } from './router.js';
 import { z } from 'zod';
+import { DingtalkMessageSender } from '../dingtalk/message-sender.js';
+import type { DingtalkTokenManager } from '../dingtalk/access-token.js';
 
 const log = createLogger('McpBridge');
 
@@ -25,7 +27,7 @@ export function enqueueMessage(message: Message): void {
   }
 }
 
-export type Platform = 'wecom' | 'feishu' | 'telegram';
+export type Platform = 'wecom' | 'feishu' | 'telegram' | 'dingtalk';
 
 /**
  * Routing table for multi-platform MCP tools
@@ -34,6 +36,8 @@ export interface McpRoutingTable {
   wecom?: WSClient;
   feishu?: LarkClient;
   telegram?: Telegraf;
+  /** 钉钉工作通知发送（userid_list 单聊），token 由 DingtalkTokenManager 自动刷新 */
+  dingtalk?: { tokenManager: DingtalkTokenManager; agentId: string };
 }
 
 /**
@@ -41,23 +45,23 @@ export interface McpRoutingTable {
  */
 export function createMcpBridgeTools(table: McpRoutingTable) {
   const SendMessageSchema = z.object({
-    platform: z.enum(['wecom', 'feishu', 'telegram']).describe('Target platform'),
+    platform: z.enum(['wecom', 'feishu', 'telegram', 'dingtalk']).describe('Target platform'),
     chatId: z.string().describe('The chat ID to send the message to'),
     content: z.string().describe('The message content (supports markdown where supported)'),
   });
 
   const GetIncomingMessagesSchema = z.object({
-    platform: z.enum(['wecom', 'feishu', 'telegram']).optional().describe('Filter by platform'),
+    platform: z.enum(['wecom', 'feishu', 'telegram', 'dingtalk']).optional().describe('Filter by platform'),
     limit: z.number().optional().default(10).describe('Maximum number of messages to return'),
   });
 
   const GetChatInfoSchema = z.object({
-    platform: z.enum(['wecom', 'feishu', 'telegram']).describe('Platform of the chat'),
+    platform: z.enum(['wecom', 'feishu', 'telegram', 'dingtalk']).describe('Platform of the chat'),
     chatId: z.string().describe('The chat ID to get information about'),
   });
 
   const GetActiveChatsSchema = z.object({
-    platform: z.enum(['wecom', 'feishu', 'telegram']).optional().describe('Filter by platform'),
+    platform: z.enum(['wecom', 'feishu', 'telegram', 'dingtalk']).optional().describe('Filter by platform'),
   });
 
   const sendMessageTool = {
@@ -110,6 +114,10 @@ export function createMcpBridgeTools(table: McpRoutingTable) {
           } else if (platform === 'telegram') {
             if (!table.telegram) throw new Error('Telegram not initialized');
             await table.telegram.telegram.sendMessage(chatId, content);
+          } else if (platform === 'dingtalk') {
+            if (!table.dingtalk) throw new Error('DingTalk not initialized');
+            const sender = new DingtalkMessageSender(table.dingtalk.tokenManager, table.dingtalk.agentId);
+            await sender.sendTextReply(chatId, content);
           }
           return {
             content: [
@@ -365,4 +373,12 @@ export function registerTelegramMessageHandler(
 
     return next();
   });
+}
+
+/**
+ * 将钉钉 Stream 收到的用户消息登记到 MCP 路由（与其它平台一致）
+ */
+export function registerDingtalkInboundMessage(message: Message): void {
+  router.registerMessage(message);
+  enqueueMessage(message);
 }

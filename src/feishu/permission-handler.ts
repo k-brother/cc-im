@@ -10,7 +10,7 @@ const log = createLogger('FeishuPermission');
 export function registerFeishuPermissionSender() {
   registerPermissionSender('feishu', {
     sendPermissionCard,
-    updatePermissionCard: ({ messageId, toolName, decision }) =>
+    updatePermissionCard: ({ messageId, chatId: _chatId, toolName, decision }) =>
       updatePermissionCard(messageId, toolName, decision),
   });
 }

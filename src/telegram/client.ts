@@ -17,10 +17,14 @@ export function getBotUsername(): string | undefined {
 }
 
 export async function initTelegram(config: Config, setupHandlers: (bot: Telegraf) => void) {
+  const telegramConfig = config.platforms.telegram;
+  if (!telegramConfig?.botToken) {
+    throw new Error('Telegram platform not configured');
+  }
   log.debug('Initializing Telegram bot...');
   log.debug('Bot token: configured');
 
-  bot = new Telegraf(config.telegramBotToken);
+  bot = new Telegraf(telegramConfig.botToken);
 
   setupHandlers(bot);
 

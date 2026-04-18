@@ -42,7 +42,7 @@ export interface TaskAdapter {
   throttleMs: number;
   /** 任务启动后的回调，传入可变的 TaskRunState 对象供调用方存入 runningTasks */
   onTaskReady(state: TaskRunState): void;
-  /** 首次收到内容时的回调（可选，飞书用来���除 waitingTimer） */
+  /** 首次收到内容时的回调（可选，飞书用来清除 waitingTimer） */
   onFirstContent?(): void;
   /** 发送图片消息（可选，用于截图自动发送） */
   sendImage?(imagePath: string): Promise<void>;

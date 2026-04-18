@@ -1,5 +1,14 @@
 import { MAX_STREAMING_CONTENT_LENGTH, MAX_CARD_CONTENT_LENGTH } from '../constants.js';
 import { splitLongContent as sharedSplitLongContent, truncateText, buildInputSummary } from '../shared/utils.js';
+import { t, type Language } from '../i18n.js';
+import { loadConfig } from '../config.js';
+
+// Lazy-load config to avoid circular dependency
+let _config: ReturnType<typeof loadConfig> | null = null;
+function getLang(): Language {
+  if (!_config) _config = loadConfig();
+  return _config.language;
+}
 
 export type CardStatus = 'processing' | 'thinking' | 'streaming' | 'done' | 'error';
 
@@ -18,13 +27,16 @@ const HEADER_TEMPLATES: Record<CardStatus, string> = {
   error: 'red',
 };
 
-const HEADER_TITLES: Record<CardStatus, string> = {
-  processing: 'Claude Code - 处理中...',
-  thinking: 'Claude Code - 思考中...',
-  streaming: 'Claude Code',
-  done: 'Claude Code',
-  error: 'Claude Code - 错误',
-};
+function getHeaderTitles(): Record<CardStatus, string> {
+  const locale = t(getLang());
+  return {
+    processing: locale.cardStatusProcessing,
+    thinking: locale.cardStatusThinking,
+    streaming: locale.cardStatusStreaming,
+    done: locale.cardStatusDone,
+    error: locale.cardStatusError,
+  };
+}
 
 export function truncateForCard(text: string): string {
   return truncateText(text, MAX_CARD_CONTENT_LENGTH);
@@ -56,7 +68,7 @@ export function buildCardObject(options: CardOptions, messageId?: string): Recor
           tag: 'button',
           text: {
             tag: 'plain_text',
-            content: '⏹️ 停止',
+            content: t(getLang()).stopButton,
           },
           type: 'danger',
           value: { action: 'stop', message_id: messageId },
@@ -65,13 +77,14 @@ export function buildCardObject(options: CardOptions, messageId?: string): Recor
     });
   }
 
+  const headerTitles = getHeaderTitles();
   return {
     config: { wide_screen_mode: true, update_multi: true },
     header: {
       template: HEADER_TEMPLATES[status],
       title: {
         tag: 'plain_text',
-        content: HEADER_TITLES[status],
+        content: headerTitles[status],
       },
     },
     elements,
@@ -87,13 +100,14 @@ export function splitLongContent(text: string, maxLen = MAX_CARD_CONTENT_LENGTH)
 }
 
 export function buildPermissionCard(requestId: string, toolName: string, toolInput: Record<string, unknown>): string {
+  const locale = t(getLang());
   const inputSummary = buildInputSummary(toolName, toolInput);
 
   const card = {
     config: { wide_screen_mode: true, update_multi: true },
     header: {
       template: 'orange',
-      title: { tag: 'plain_text', content: `🔐 权限确认 - ${toolName}` },
+      title: { tag: 'plain_text', content: `${locale.permissionCardTitle}${toolName}` },
     },
     elements: [
       { tag: 'markdown', content: truncateForCard(inputSummary) },
@@ -102,13 +116,13 @@ export function buildPermissionCard(requestId: string, toolName: string, toolInp
         actions: [
           {
             tag: 'button',
-            text: { tag: 'plain_text', content: '✅ 允许' },
+            text: { tag: 'plain_text', content: locale.allowButton },
             type: 'primary',
             value: JSON.stringify({ action: 'allow', requestId }),
           },
           {
             tag: 'button',
-            text: { tag: 'plain_text', content: '❌ 拒绝' },
+            text: { tag: 'plain_text', content: locale.denyButton },
             type: 'danger',
             value: JSON.stringify({ action: 'deny', requestId }),
           },
@@ -121,15 +135,16 @@ export function buildPermissionCard(requestId: string, toolName: string, toolInp
 }
 
 export function buildPermissionResultCard(toolName: string, decision: 'allow' | 'deny'): string {
+  const locale = t(getLang());
   const isAllowed = decision === 'allow';
   const card = {
     config: { wide_screen_mode: true, update_multi: true },
     header: {
       template: isAllowed ? 'green' : 'red',
-      title: { tag: 'plain_text', content: `🔐 ${toolName} - ${isAllowed ? '已允许 ✓' : '已拒绝 ✗'}` },
+      title: { tag: 'plain_text', content: `${locale.permissionCardTitle}${toolName} - ${isAllowed ? locale.permissionAllowedStatus : locale.permissionDeniedStatus}` },
     },
     elements: [
-      { tag: 'markdown', content: isAllowed ? '✅ 操作已允许执行。' : '❌ 操作已被拒绝。' },
+      { tag: 'markdown', content: isAllowed ? locale.permissionAllowedText : locale.permissionDeniedText },
     ],
   };
   return JSON.stringify(card);
@@ -176,7 +191,7 @@ export function buildCardV2Object(options: CardOptions, cardId?: string): Record
   if ((status === 'processing' || status === 'thinking' || status === 'streaming') && cardId) {
     elements.push({
       tag: 'button',
-      text: { tag: 'plain_text', content: '⏹️ 停止' },
+      text: { tag: 'plain_text', content: t(getLang()).stopButton },
       type: 'danger',
       value: { action: 'stop', card_id: cardId },
       element_id: 'action_stop',
@@ -184,6 +199,7 @@ export function buildCardV2Object(options: CardOptions, cardId?: string): Record
   }
 
   const isActive = status === 'processing' || status === 'thinking' || status === 'streaming';
+  const headerTitles = getHeaderTitles();
 
   return {
     schema: '2.0',
@@ -193,7 +209,7 @@ export function buildCardV2Object(options: CardOptions, cardId?: string): Record
     },
     header: {
       template: HEADER_TEMPLATES[status],
-      title: { tag: 'plain_text', content: HEADER_TITLES[status] },
+      title: { tag: 'plain_text', content: headerTitles[status] },
     },
     body: {
       direction: 'vertical',

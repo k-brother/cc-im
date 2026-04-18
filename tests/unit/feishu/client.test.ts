@@ -49,10 +49,10 @@ describe('feishu/client', () => {
     mockClientInstance.request.mockResolvedValue({ bot: { open_id: 'ou_test123' } });
 
     const { initFeishu, getClient, getBotOpenId } = await import('../../../src/feishu/client.js');
-    const dispatcher = new Lark.EventDispatcher();
+    const dispatcher = new Lark.EventDispatcher({});
 
     await initFeishu(
-      { feishuAppId: 'app_id', feishuAppSecret: 'secret' } as any,
+      { platforms: { feishu: { appId: 'app_id', appSecret: 'secret' } } } as any,
       dispatcher,
     );
 
@@ -64,11 +64,11 @@ describe('feishu/client', () => {
     mockClientInstance.request.mockRejectedValue(new Error('Network error'));
 
     const { initFeishu, getBotOpenId } = await import('../../../src/feishu/client.js');
-    const dispatcher = new Lark.EventDispatcher();
+    const dispatcher = new Lark.EventDispatcher({});
 
     // 不应抛出异常
     await initFeishu(
-      { feishuAppId: 'app_id', feishuAppSecret: 'secret' } as any,
+      { platforms: { feishu: { appId: 'app_id', appSecret: 'secret' } } } as any,
       dispatcher,
     );
 

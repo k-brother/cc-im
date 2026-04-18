@@ -13,6 +13,7 @@ interface ActiveChatsData {
   feishu?: string;
   telegram?: string;
   wecom?: string;
+  dingtalk?: string;
 }
 
 let data: ActiveChatsData = {};
@@ -42,11 +43,11 @@ export function loadActiveChats(): void {
   }
 }
 
-export function getActiveChatId(platform: 'feishu' | 'telegram' | 'wecom'): string | undefined {
+export function getActiveChatId(platform: 'feishu' | 'telegram' | 'wecom' | 'dingtalk'): string | undefined {
   return data[platform];
 }
 
-export function setActiveChatId(platform: 'feishu' | 'telegram' | 'wecom', chatId: string): void {
+export function setActiveChatId(platform: 'feishu' | 'telegram' | 'wecom' | 'dingtalk', chatId: string): void {
   if (data[platform] === chatId) return;
   data[platform] = chatId;
   scheduleSave();

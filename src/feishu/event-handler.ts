@@ -16,6 +16,8 @@ import { IMAGE_DIR } from '../constants.js';
 import { executeClaudeTask, handleStopAction, type TaskInfo } from './task-executor.js';
 import { setActiveChatId } from '../shared/active-chats.js';
 import { createLogger } from '../logger.js';
+import { ApprovalManager, shouldEnableApprovalManager } from '../access/approval-manager.js';
+import { FeishuApprovalSender } from './approval-sender.js';
 
 const log = createLogger('EventHandler');
 
@@ -100,7 +102,7 @@ export interface FeishuEventHandlerHandle {
 }
 
 export function createEventDispatcher(config: Config, sessionManager: SessionManager): FeishuEventHandlerHandle {
-  const accessControl = new AccessControl(config.allowedUserIds);
+  const accessControl = new AccessControl(config);
   const requestQueue = new RequestQueue();
 
   // 费用跟踪（按用户累积）
@@ -108,6 +110,12 @@ export function createEventDispatcher(config: Config, sessionManager: SessionMan
   const runningTasks = new Map<string, TaskInfo>();
   const stopTaskCleanup = startTaskCleanup(runningTasks);
   const dedup = new MessageDedup();
+
+  // 创建审批管理器
+  const approvalSender = new FeishuApprovalSender();
+  const approvalManager = config.privileged && shouldEnableApprovalManager(config.privileged)
+    ? new ApprovalManager(config.privileged, new Map([['feishu', approvalSender]]))
+    : undefined;
 
   // Create command handler with dependencies
   const commandHandler = new CommandHandler({
@@ -117,6 +125,7 @@ export function createEventDispatcher(config: Config, sessionManager: SessionMan
     sender: { sendTextReply },
     userCosts,
     getRunningTasksSize: () => runningTasks.size,
+    approvalManager,
   });
 
   // Register feishu permission sender
@@ -309,7 +318,7 @@ export function createEventDispatcher(config: Config, sessionManager: SessionMan
         mentionedBot = true;
       }
 
-      if (!accessControl.isAllowed(senderId)) {
+      if (!accessControl.isAllowed(senderId, 'feishu')) {
         log.warn(`Access denied for user: ${senderId}`);
         await sendTextReply(chatId, '抱歉，您没有使用此机器人的权限。');
         return;
@@ -407,7 +416,7 @@ export function createEventDispatcher(config: Config, sessionManager: SessionMan
         executeClaudeTask(
           { config, sessionManager, userCosts, runningTasks },
           userId, chatId, prompt, workDir, convId, threadCtx,
-        ), threadCtx)) {
+        ), isGroup, threadCtx)) {
         return;
       }
 
