@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 cc-im 新增企业微信（WeCom）平台支持，使用 `@wecom/aibot-node-sdk` WebSocket 长连接接入，支持私聊、群聊、流式回复、权限确认和停止功能。
+**Goal:** 为 synapse 新增企业微信（WeCom）平台支持，使用 `@wecom/aibot-node-sdk` WebSocket 长连接接入，支持私聊、群聊、流式回复、权限确认和停止功能。
 
 **Architecture:** 新增 `src/wecom/` 目录（client.ts、event-handler.ts、message-sender.ts），遵循 Telegram 平台的实现模式。复用共享层（SessionManager、RequestQueue、CommandHandler、ClaudeTask）。流式输出使用 SDK 原生 `replyStream()` 配合 6 分钟自动续接。权限确认使用 `sendMessage()` 主动推送模板卡片。
 

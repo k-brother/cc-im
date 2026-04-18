@@ -5,7 +5,7 @@ description: 为机器人添加新的斜杠命令，自动在所有平台注册�
 
 # Add Command Skill
 
-为 cc-im 添加新的斜杠命令，确保在所有平台（飞书 + Telegram）中正确注册。
+为 synapse 添加新的斜杠命令，确保在所有平台（飞书 + Telegram）中正确注册。
 
 ## 使用方式
 

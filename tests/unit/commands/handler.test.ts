@@ -17,7 +17,7 @@ vi.mock('../../../src/hook/permission-server.js', () => ({
 }));
 
 vi.mock('../../../src/constants.js', () => ({
-  APP_HOME: '/tmp/cc-im-test',
+  APP_HOME: '/tmp/synapse-test',
   TERMINAL_ONLY_COMMANDS: new Set([
     '/context', '/rewind', '/copy', '/export',
     '/config', '/init', '/memory', '/permissions', '/theme',
@@ -100,6 +100,7 @@ function createMockConfig(overrides?: Partial<Config>): Config {
     hookPort: 18900,
     logDir: '/tmp/logs',
     logLevel: 'DEBUG',
+    language: 'zh' as const,
     ...overrides,
   };
 }

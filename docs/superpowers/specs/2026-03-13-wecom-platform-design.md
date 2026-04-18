@@ -2,7 +2,7 @@
 
 ## 概述
 
-为 cc-im 新增企业微信（WeCom）平台支持，功能尽可能与飞书保持一致。使用官方 `@wecom/aibot-node-sdk` 通过 WebSocket 长连接接入，支持私聊和群聊，流式输出采用 SDK 原生 `replyStream` 能力，权限确认使用模板卡片按钮。
+为 synapse 新增企业微信（WeCom）平台支持，功能尽可能与飞书保持一致。使用官方 `@wecom/aibot-node-sdk` 通过 WebSocket 长连接接入，支持私聊和群聊，流式输出采用 SDK 原生 `replyStream` 能力，权限确认使用模板卡片按钮。
 
 ## 技术选型
 

@@ -156,7 +156,7 @@ describe('checkForUpdate - 网络异常', () => {
   it('响应中无 version 字段时静默跳过', async () => {
     const req = fakeRequest();
     mockGet.mockImplementation((_url: string, _opts: unknown, cb: (res: unknown) => void) => {
-      cb(fakeResponse(200, JSON.stringify({ name: 'cc-im' })));
+      cb(fakeResponse(200, JSON.stringify({ name: 'synapse' })));
       return req;
     });
 

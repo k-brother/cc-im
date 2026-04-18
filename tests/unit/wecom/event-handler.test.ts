@@ -99,7 +99,7 @@ vi.mock('../../../src/commands/handler.js', () => ({
 }));
 
 vi.mock('../../../src/constants.js', () => ({
-  APP_HOME: '/tmp/cc-im-test',
+  APP_HOME: '/tmp/synapse-test',
   TERMINAL_ONLY_COMMANDS: new Set([
     '/context', '/rewind', '/resume', '/copy', '/export',
     '/config', '/init', '/memory', '/permissions', '/theme',
@@ -108,7 +108,7 @@ vi.mock('../../../src/constants.js', () => ({
   ]),
   DEDUP_TTL_MS: 5 * 60 * 1000,
   WECOM_THROTTLE_MS: 200,
-  IMAGE_DIR: '/tmp/cc-im-images',
+  IMAGE_DIR: '/tmp/synapse-images',
 }));
 
 vi.mock('../../../src/claude/cli-runner.js', () => ({
@@ -163,6 +163,7 @@ const mockConfig = {
   hookPort: 18900,
   logDir: '/tmp/logs',
   logLevel: 'DEBUG' as const,
+  language: 'zh' as const,
 };
 
 const mockSessionManager = {
