@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versio
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-04-19
+
+### 其他 (Other)
+
+- 新增 `npm install -g @tk-brother/synapse` 全局安装命令到文档
+
 ## [1.0.0] - 2026-04-18
 
 ### 新功能 (New Features)
