@@ -4,15 +4,13 @@ import { createLogger } from '../logger.js';
 import type { ThreadContext } from '../shared/types.js';
 import type { DingtalkTokenManager } from './access-token.js';
 import { t, type Language } from '../i18n.js';
-import { loadConfig } from '../config.js';
 
 const log = createLogger('DingTalkSender');
 
-// Lazy-load config to avoid circular dependency
-let _config: ReturnType<typeof loadConfig> | null = null;
+// Read language directly from env to avoid loading full config (which validates Claude CLI)
 function getLang(): Language {
-  if (!_config) _config = loadConfig();
-  return _config.language;
+  const lang = process.env.SYNAPSE_LANGUAGE?.toLowerCase();
+  return (lang === 'en' ? 'en' : 'zh') as Language;
 }
 
 /** 不合法的 access_token / token 过期等，刷新后重试一次 */
@@ -20,10 +18,6 @@ function isInvalidTokenErrcode(code: number | undefined): boolean {
   return code === 40014 || code === 42001 || code === 40001;
 }
 
-/**
- * 钉钉消息发送器
- * 通过工作通知 API 发送；access_token 随 DingtalkTokenManager 自动刷新。
- */
 export class DingtalkMessageSender {
   constructor(
     private readonly tokens: DingtalkTokenManager,

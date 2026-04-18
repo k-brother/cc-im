@@ -6,15 +6,13 @@ import { createLogger } from '../logger.js';
 import { splitLongContent, buildInputSummary } from '../shared/utils.js';
 import { MAX_WECOM_MESSAGE_LENGTH, WECOM_STREAM_TIMEOUT_MS } from '../constants.js';
 import { t, type Language } from '../i18n.js';
-import { loadConfig } from '../config.js';
 
 const log = createLogger('WecomSender');
 
-// Lazy-load config to avoid circular dependency
-let _config: ReturnType<typeof loadConfig> | null = null;
+// Read language directly from env to avoid loading full config (which validates Claude CLI)
 function getLang(): Language {
-  if (!_config) _config = loadConfig();
-  return _config.language;
+  const lang = process.env.SYNAPSE_LANGUAGE?.toLowerCase();
+  return (lang === 'en' ? 'en' : 'zh') as Language;
 }
 
 export type { WsFrame };
