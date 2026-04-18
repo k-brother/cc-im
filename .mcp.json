@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "synapse",
       "args": ["mcp"],
-      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
+      "description": "Synapse — Multi-platform AI bridge with proactive messaging capabilities"
     }
   }
 }
