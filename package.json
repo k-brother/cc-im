@@ -20,7 +20,7 @@
     ".mcp.json"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli.js dist/hook/hook-script.js dist/hook/ensure-hook.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build",
