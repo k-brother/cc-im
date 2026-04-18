@@ -28,6 +28,24 @@ export interface Config {
   hookPort: number;
   logDir: string;
   logLevel: LogLevel;
+  // 机器人名称
+  botName?: string;
+  wecomBotName?: string;
+  feishuBotName?: string;
+  telegramBotName?: string;
+  // 启动通知配置
+  startupNotify?: StartupNotifyConfig;
+}
+
+export interface StartupNotifyConfig {
+  wecom?: PlatformNotifyConfig;
+  feishu?: PlatformNotifyConfig;
+  telegram?: PlatformNotifyConfig;
+}
+
+export interface PlatformNotifyConfig {
+  groups: string[];
+  users: string[];
 }
 
 interface FileConfig {
@@ -47,6 +65,11 @@ interface FileConfig {
   hookPort?: number;
   logDir?: string;
   logLevel?: LogLevel;
+  botName?: string;
+  wecomBotName?: string;
+  feishuBotName?: string;
+  telegramBotName?: string;
+  startupNotify?: StartupNotifyConfig;
 }
 
 function loadFileConfig(): FileConfig {
@@ -207,5 +230,10 @@ export function loadConfig(): Config {
     hookPort,
     logDir,
     logLevel,
+    botName: file.botName,
+    wecomBotName: file.wecomBotName,
+    feishuBotName: file.feishuBotName,
+    telegramBotName: file.telegramBotName,
+    startupNotify: file.startupNotify,
   };
 }

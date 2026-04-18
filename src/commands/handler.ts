@@ -75,6 +75,7 @@ export class CommandHandler {
     if (trimmed === '/doctor') return this.handleDoctor(chatId, userId, threadCtx);
     if (trimmed === '/allow' || trimmed === '/y') return this.handleAllow(chatId, threadCtx);
     if (trimmed === '/deny' || trimmed === '/n') return this.handleDeny(chatId, threadCtx);
+    if (trimmed === '/chatid') return this.handleChatId(chatId, threadCtx);
     // 带可选参数的命令
     if (trimmed === '/cd' || trimmed.startsWith('/cd ')) {
       return this.handleCd(chatId, userId, trimmed.slice(3).trim(), threadCtx);
@@ -133,6 +134,7 @@ export class CommandHandler {
       stopCmd,
       '/allow (/y)     - 允许权限请求（按钮不可用时的备选）',
       '/deny (/n)      - 拒绝权限请求（按钮不可用时的备选）',
+      '/chatid         - 查看当前会话 ID',
     ].filter(Boolean).join('\n');
 
     await this.deps.sender.sendTextReply(chatId, helpText, threadCtx);
@@ -402,6 +404,15 @@ export class CommandHandler {
     } else {
       await this.deps.sender.sendTextReply(chatId, 'ℹ️ 没有待确认的权限请求', threadCtx);
     }
+    return true;
+  }
+
+  /**
+   * 处理 /chatid 命令 - 查看当前会话 ID
+   */
+  async handleChatId(chatId: string, threadCtx?: ThreadContext): Promise<boolean> {
+    const prefix = threadCtx ? `话题 ${threadCtx.threadId}` : '当前会话';
+    await this.deps.sender.sendTextReply(chatId, `${prefix} ID: ${chatId}`, threadCtx);
     return true;
   }
 

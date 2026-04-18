@@ -37,8 +37,10 @@ pnpm test:watch
 
 项目支持飞书、Telegram 和企业微信三个平台，可以同时运行或单独使用。
 
+- **入口**：`src/cli.ts` → `src/index.ts` 的 `main()` 是唯一入口（统一 Bridge + MCP 模式）
 - **平台检测**：`src/config.ts` 中的 `detectPlatforms()` 自动检测已配置的平台
-- **并行初始化**：`src/index.ts` 中使用 `Promise.all()` 并行初始化多个平台
+- **顺序初始化**：各平台按顺序初始化，单个平台失败不影响其他平台（独立 try/catch）
+- **MCP 集成**：MCP server 在平台初始化之前启动（抢占 stdio），各平台同时注册 Bridge 处理器和 MCP 消息处理器
 - **统一接口**：通过 `MessageSender` 接口抽象平台差异，命令处理器（`src/commands/handler.ts`）平台无关
 
 平台特定实现：
@@ -204,7 +206,32 @@ claude -p \
 - 5 秒超时，网络不可达时静默跳过，不阻塞启动流程
 - 语义化版本比较（major.minor.patch）
 
-### 9. 飞书 CardKit 流式架构
+### 9. 生命周期通知（启动通知）
+
+位置：`src/lifecycle.ts`
+
+机器人启动成功后，可向指定用户或群组发送欢迎通知。配置通过 `startupNotify`（`~/.cc-im/config.json`）管理：
+
+```json
+{
+  "startupNotify": {
+    "wecom": { "groups": ["群ID1", "群ID2"], "users": ["用户ID1"] },
+    "feishu": { "groups": [], "users": ["用户ID1"] },
+    "telegram": { "groups": [], "users": [] }
+  }
+}
+```
+
+**配置字段**：
+- `groups`：启动通知发送的目标群聊 ID 列表
+- `users`：启动通知发送的目标用户 ID 列表
+
+**行为**：
+- 通知内容包含机器人名称（取各平台对应 `*BotName` 配置，无则回退 `botName`）
+- 各平台独立发送，单平台配置错误不影响其他平台
+- 网络或 API 错误静默捕获，不阻断启动流程
+
+### 10. 飞书 CardKit 流式架构
 
 飞书端的流式输出使用 CardKit v1 API 实现打字机效果，相关模块：
 
@@ -302,6 +329,12 @@ pnpm test -- tests/unit/queue/request-queue.test.ts
 - `PROXY_URL`：代理地址（可选），传递给 Claude CLI 子进程的 `HTTPS_PROXY`/`HTTP_PROXY` 环境变量
 - `HOOK_SERVER_PORT`：权限服务器端口，默认 18900
 - `LOG_LEVEL`：日志等级（`DEBUG`/`INFO`/`WARN`/`ERROR`），默认 `DEBUG`
+
+**配置文件额外字段**（`~/.cc-im/config.json`）：
+
+- `botName`：全局机器人显示名称（统一后备值）
+- `wecomBotName`、`feishuBotName`、`telegramBotName`：各平台机器人显示名称，优先于 `botName`
+- `startupNotify`：启动通知配置（详见「生命周期通知」）
 
 **应用数据目录**：
 - 根目录：`~/.cc-im`（常量 `APP_HOME`，定义在 `src/constants.ts`）

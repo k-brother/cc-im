@@ -96,8 +96,8 @@ async function start() {
   process.on('exit', cleanupPid);
 
   // Start unified mode (Bridge + MCP)
-  const { startUnifiedMode } = await import('./index.js');
-  await startUnifiedMode();
+  const { main } = await import('./index.js');
+  await main();
 }
 
 function parseArgs() {

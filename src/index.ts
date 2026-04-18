@@ -13,7 +13,7 @@
  *   mcp          - Start MCP only mode (no Bridge AI)
  */
 
-import { loadConfig } from './config.js';
+import { loadConfig, type Config, type StartupNotifyConfig } from './config.js';
 import { initFeishu, stopFeishu } from './feishu/client.js';
 import { initTelegram, stopTelegram } from './telegram/client.js';
 import { createEventDispatcher, type FeishuEventHandlerHandle } from './feishu/event-handler.js';
@@ -50,169 +50,91 @@ function getClaudeVersion(cliPath: string): string {
   try { return execFileSync(cliPath, ['--version'], { timeout: 5000 }).toString().trim(); } catch { return '未知'; }
 }
 
-async function sendLifecycleNotification(activeBots: string[], message: string) {
+function getBotName(platform: 'feishu' | 'telegram' | 'wecom', config: Config): string {
+  // Platform-specific name takes precedence
+  if (platform === 'wecom' && config.wecomBotName) return config.wecomBotName;
+  if (platform === 'feishu' && config.feishuBotName) return config.feishuBotName;
+  if (platform === 'telegram' && config.telegramBotName) return config.telegramBotName;
+  // Fall back to unified botName
+  if (config.botName) return config.botName;
+  // Default fallback
+  return 'cc-im';
+}
+
+const GROUP_GREETING = (botName: string) => `${botName} 已上线
+您好！我是您的智能办公助理。
+
+📌 支持功能：
+• 文档撰写与润色
+• 数据分析与报告
+• 智能问答与解答
+
+🔧 常用命令：
+/new — 开始新对话
+/resume — 继续未完成的对话
+/model — 切换 AI 模型
+/stop — 停止当前任务
+/chatid — 查看当前会话 ID
+
+💬 直接 @机器人 + 问题即可使用
+
+服务时间: 工作日 09:00-18:00`;
+
+const PRIVATE_GREETING = (botName: string, activeBots: string[], config: Config) => {
+  const platform = activeBots[0] === 'WeCom' ? '企业微信' : activeBots[0] || '未知';
+  return `${botName} 服务已启动
+平台: ${platform}
+工作目录: ${config.claudeWorkDir}
+权限确认: ${config.claudeSkipPermissions ? '已跳过' : '已启用'}
+Claude CLI: ${getClaudeVersion(config.claudeCliPath)}
+Node: ${process.version}`;
+};
+
+async function sendLifecycleNotification(activeBots: string[], config: Config, isShutdown = false, uptime?: { h: number; m: number }) {
+  if (!config.startupNotify) {
+    log.info('启动通知已禁用（未配置 startupNotify）');
+    return;
+  }
+
   const tasks: Promise<void>[] = [];
+
   for (const bot of activeBots) {
     const platform = bot.toLowerCase() as 'feishu' | 'telegram' | 'wecom';
-    const chatId = getActiveChatId(platform);
-    if (!chatId) {
-      log.info(`${bot} 启动通知跳过：尚无活跃聊天记录，向机器人发送一条消息后下次启动即可收到通知`);
-      continue;
-    }
+    const notifyConfig = config.startupNotify?.[platform];
+    if (!notifyConfig) continue;
+
+    const botName = getBotName(platform, config);
     const sender = platform === 'feishu' ? feishuSendText : platform === 'wecom' ? wecomSendText : telegramSendText;
-    tasks.push(sender(chatId, message).catch((err) => {
-      log.debug(`Failed to send ${bot} lifecycle notification:`, err);
-    }));
+
+    // Send to groups
+    for (const chatId of notifyConfig.groups) {
+      const message = isShutdown
+        ? `🔴 ${botName} 服务正在关闭...\n运行时长: ${uptime!.h > 0 ? `${uptime!.h}h${uptime!.m}m` : `${uptime!.m}m`}`
+        : GROUP_GREETING(botName);
+      tasks.push(sender(chatId, message).catch((err) => {
+        log.debug(`Failed to send group notification to ${chatId}:`, err);
+      }));
+    }
+
+    // Send to users (private chat)
+    for (const chatId of notifyConfig.users) {
+      const message = isShutdown
+        ? `🔴 ${botName} 服务正在关闭...\n运行时长: ${uptime!.h > 0 ? `${uptime!.h}h${uptime!.m}m` : `${uptime!.m}m`}`
+        : PRIVATE_GREETING(botName, activeBots, config);
+      tasks.push(sender(chatId, message).catch((err) => {
+        log.debug(`Failed to send user notification to ${chatId}:`, err);
+      }));
+    }
   }
+
   await Promise.allSettled(tasks);
 }
 
-/**
- * Start unified Bridge + MCP mode
- * Initializes all enabled platforms and shares MCP tools across them
- */
-async function startUnifiedMode(): Promise<void> {
-  const config = loadConfig();
-  initLogger(config.logDir, config.logLevel);
-  loadActiveChats();
-  log.info('Starting cc-im unified mode (Bridge + MCP)...');
-
-  // Permission server for Bridge
-  let permissionServer: { port: number; close: () => Promise<void> } | null = null;
-  if (!config.claudeSkipPermissions) {
-    ensureHookConfigured();
-    permissionServer = await startPermissionServer(config.hookPort);
-    log.info(`Permission hook server started on port ${permissionServer.port}`);
-  }
-
-  // Session manager for Bridge
-  const sessionManager = new SessionManager(config.claudeWorkDir, config.allowedBaseDirs);
-
-  // Routing table for MCP tools
-  const routingTable: { wecom?: typeof import('@wecom/aibot-node-sdk').WSClient.prototype; feishu?: import('@larksuiteoapi/node-sdk').Client; telegram?: import('telegraf').Telegraf } = {};
-
-  // Platform handles for shutdown
-  let wecomHandle: WecomEventHandlerHandle | null = null;
-  let feishuHandle: FeishuEventHandlerHandle | null = null;
-  let telegramBot: ReturnType<typeof getTelegramBot> | null = null;
-
-  // Initialize WeCom with Bridge event handlers
-  if (config.enabledPlatforms.includes('wecom')) {
-    if (!config.wecomBotId || !config.wecomBotSecret) {
-      log.error('WeCom is enabled but WECOM_BOT_ID / WECOM_BOT_SECRET not configured. Please configure them or remove wecom from enabledPlatforms.');
-      process.exit(1);
-    }
-    const { wsClient } = await initWecom(config, (client) => {
-      wecomHandle = setupWecomHandlers(client, config, sessionManager);
-      registerWecomMessageHandler(client);
-      return wecomHandle;
-    });
-    routingTable.wecom = wsClient;
-    log.info('WeCom initialized (Bridge + MCP)');
-  }
-
-  // Initialize Feishu with Bridge event handlers
-  if (config.enabledPlatforms.includes('feishu')) {
-    if (!config.feishuAppId || !config.feishuAppSecret) {
-      log.warn('Feishu is in enabledPlatforms but FEISHU_APP_ID / FEISHU_APP_SECRET not configured. Skipping Feishu.');
-    } else {
-      feishuHandle = createEventDispatcher(config, sessionManager);
-      await initFeishu(config, feishuHandle.dispatcher);
-      registerFeishuMessageHandler(feishuHandle.dispatcher, enqueueMessage);
-      routingTable.feishu = getFeishuClient();
-      log.info('Feishu initialized (Bridge + MCP)');
-    }
-  }
-
-  // Initialize Telegram with Bridge event handlers
-  if (config.enabledPlatforms.includes('telegram')) {
-    if (!config.telegramBotToken) {
-      log.warn('Telegram is in enabledPlatforms but TELEGRAM_BOT_TOKEN not configured. Skipping Telegram.');
-    } else {
-      await initTelegram(config, (bot) => {
-        setupTelegramHandlers(bot, config, sessionManager);
-      });
-      telegramBot = getTelegramBot();
-      registerTelegramMessageHandler(telegramBot, enqueueMessage);
-      routingTable.telegram = telegramBot;
-      log.info('Telegram initialized (Bridge + MCP)');
-    }
-  }
-
-  if (Object.keys(routingTable).length === 0) {
-    log.error('No platforms were successfully initialized. Check your configuration.');
-    process.exit(1);
-  }
-
-  log.info(`Enabled platforms: ${Object.keys(routingTable).join(', ')}`);
-
-  // Create MCP tools
-  const { tools, handlers } = createMcpBridgeTools(routingTable);
-
-  // Start MCP server on stdio
-  log.info('Starting MCP server on stdio...');
-  const server = new McpServer(
-    { name: 'cc-im', version: APP_VERSION },
-    { capabilities: { tools: {} } }
-  );
-
-  // Register tools
-  for (const tool of tools) {
-    server.registerTool(tool.name, tool as any, async (args: any) => {
-      const handler = (handlers as any)[tool.name];
-      if (handler) {
-        return await handler(args);
-      }
-      return { content: [{ type: 'text', text: `Unknown tool: ${tool.name}` }], isError: true };
-    });
-  }
-
-  // Connect MCP to stdio - this takes over stdin/stdout
-  const transport = new StdioServerTransport();
-  await server.connect(transport as any);
-  log.info('MCP server running on stdio');
-
-  // Keep process alive (MCP takes over)
-  process.on('SIGINT', async () => {
-    log.info('Shutting down...');
-    wecomHandle?.stop();
-    stopWecom();
-    feishuHandle?.stop();
-    stopFeishu();
-    stopTelegram();
-    stopCardKitCleanup();
-    permissionServer?.close();
-    sessionManager.destroy();
-    flushActiveChats();
-    closeLogger();
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', async () => {
-    log.info('Shutting down...');
-    wecomHandle?.stop();
-    stopWecom();
-    feishuHandle?.stop();
-    stopFeishu();
-    stopTelegram();
-    stopCardKitCleanup();
-    permissionServer?.close();
-    sessionManager.destroy();
-    flushActiveChats();
-    closeLogger();
-    process.exit(0);
-  });
-}
-
-/**
- * Original Bridge mode (full AI + commands)
- * Logs output to file instead of taking over stdio
- */
 export async function main() {
   const config = loadConfig();
   initLogger(config.logDir, config.logLevel);
   loadActiveChats();
-  log.info('Starting cc-im bridge service...');
+  log.info('Starting cc-im unified mode (Bridge + MCP)...');
   log.info(`Enabled platforms: ${config.enabledPlatforms.join(', ')}`);
   log.info(`Allowed users: ${config.allowedUserIds.length === 0 ? 'ALL (dev mode)' : config.allowedUserIds.length + ' users configured'}`);
   log.info(`Claude CLI: ${config.claudeCliPath}`);
@@ -220,6 +142,12 @@ export async function main() {
   log.info(`Skip permissions: ${config.claudeSkipPermissions}`);
   log.info(`Timeout: ${config.claudeTimeoutMs}ms`);
 
+  const sessionManager = new SessionManager(config.claudeWorkDir, config.allowedBaseDirs);
+
+  // Mutable routing table - populated as platforms connect
+  const routingTable: { wecom?: typeof import('@wecom/aibot-node-sdk').WSClient.prototype; feishu?: import('@larksuiteoapi/node-sdk').Client; telegram?: import('telegraf').Telegraf } = {};
+
+  // Permission server
   let permissionServer: { port: number; close: () => Promise<void> } | null = null;
   if (!config.claudeSkipPermissions) {
     ensureHookConfigured();
@@ -227,58 +155,103 @@ export async function main() {
     log.info(`Permission hook server started on port ${permissionServer.port}`);
   }
 
-  const sessionManager = new SessionManager(config.claudeWorkDir, config.allowedBaseDirs);
+  // Create MCP tools with live routingTable reference
+  const { tools, handlers } = createMcpBridgeTools(routingTable);
 
-  const activeBots: string[] = [];
-  const initTasks: Promise<{ platform: string; success: boolean }>[] = [];
+  // Start MCP server on stdio (blocks until Claude Code connects)
+  log.info('Starting MCP server on stdio...');
+  const server = new McpServer(
+    { name: 'cc-im', version: APP_VERSION },
+    { capabilities: { tools: {} } }
+  );
 
+  for (const tool of tools) {
+    server.registerTool(tool.name, tool as any, async (args: any) => {
+      try {
+        const handler = (handlers as any)[tool.name];
+        if (handler) {
+          return await handler(args);
+        }
+        return { content: [{ type: 'text', text: `Unknown tool: ${tool.name}` }], isError: true };
+      } catch (err) {
+        log.error(`[MCP] Tool ${tool.name} error:`, err);
+        return {
+          content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    });
+  }
+
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport as any);
+    log.info('MCP server running on stdio');
+  } catch (err) {
+    log.error('Failed to connect MCP to stdio:', err);
+    closeLogger();
+    process.exit(1);
+  }
+
+  // Platform handles for shutdown
   let feishuHandle: FeishuEventHandlerHandle | null = null;
   let telegramHandle: TelegramEventHandlerHandle | null = null;
   let wecomHandle: WecomEventHandlerHandle | null = null;
+  const activeBots: string[] = [];
 
+  // Initialize platforms sequentially (keep original flow)
   if (config.enabledPlatforms.includes('telegram')) {
-    initTasks.push(
-      initTelegram(config, (bot) => {
-        telegramHandle = setupTelegramHandlers(bot, config, sessionManager);
-      })
-        .then(() => ({ platform: 'Telegram', success: true }))
-        .catch((err) => {
-          log.error('Failed to initialize Telegram bot:', err);
-          return { platform: 'Telegram', success: false };
-        })
-    );
+    if (!config.telegramBotToken) {
+      log.warn('Telegram is in enabledPlatforms but TELEGRAM_BOT_TOKEN not configured. Skipping.');
+    } else {
+      try {
+        await initTelegram(config, (bot) => {
+          telegramHandle = setupTelegramHandlers(bot, config, sessionManager);
+          registerTelegramMessageHandler(bot, enqueueMessage);
+          routingTable.telegram = bot;
+        });
+        activeBots.push('Telegram');
+        log.info('Telegram initialized (Bridge + MCP)');
+      } catch (err) {
+        log.error('Failed to initialize Telegram bot:', err);
+      }
+    }
   }
 
   if (config.enabledPlatforms.includes('feishu')) {
-    initTasks.push(
-      Promise.resolve().then(async () => {
+    if (!config.feishuAppId || !config.feishuAppSecret) {
+      log.warn('Feishu is in enabledPlatforms but FEISHU_APP_ID / FEISHU_APP_SECRET not configured. Skipping.');
+    } else {
+      try {
         feishuHandle = createEventDispatcher(config, sessionManager);
         await initFeishu(config, feishuHandle.dispatcher);
-        return { platform: 'Feishu', success: true };
-      }).catch((err) => {
+        registerFeishuMessageHandler(feishuHandle.dispatcher, enqueueMessage);
+        routingTable.feishu = getFeishuClient();
+        activeBots.push('Feishu');
+        log.info('Feishu initialized (Bridge + MCP)');
+      } catch (err) {
         log.error('Failed to initialize Feishu bot:', err);
-        return { platform: 'Feishu', success: false };
-      })
-    );
+      }
+    }
   }
 
   if (config.enabledPlatforms.includes('wecom')) {
-    initTasks.push(
-      initWecom(config, (wsClient) => {
-        wecomHandle = setupWecomHandlers(wsClient, config, sessionManager);
-        return wecomHandle;
-      })
-        .then(() => ({ platform: 'WeCom', success: true }))
-        .catch((err) => {
-          log.error('Failed to initialize WeCom bot:', err);
-          return { platform: 'WeCom', success: false };
-        })
-    );
-  }
-
-  const results = await Promise.all(initTasks);
-  for (const result of results) {
-    if (result.success) activeBots.push(result.platform);
+    if (!config.wecomBotId || !config.wecomBotSecret) {
+      log.warn('WeCom is enabled but WECOM_BOT_ID / WECOM_BOT_SECRET not configured. Skipping.');
+    } else {
+      try {
+        const { wsClient } = await initWecom(config, (client) => {
+          wecomHandle = setupWecomHandlers(client, config, sessionManager);
+          registerWecomMessageHandler(client);
+          return wecomHandle;
+        });
+        routingTable.wecom = wsClient;
+        activeBots.push('WeCom');
+        log.info('WeCom initialized (Bridge + MCP)');
+      } catch (err) {
+        log.error('Failed to initialize WeCom bot:', err);
+      }
+    }
   }
 
   if (activeBots.length === 0) {
@@ -299,7 +272,7 @@ export async function main() {
     `Claude CLI: ${getClaudeVersion(config.claudeCliPath)}`,
     `Node: ${process.version}`,
   ].filter(Boolean).join('\n');
-  sendLifecycleNotification(activeBots, startupMsg).catch(() => {});
+  sendLifecycleNotification(activeBots, config).catch(() => {});
   checkForUpdate(APP_VERSION).catch(() => {});
 
   const imageCleanupTimer = setInterval(() => {
@@ -317,7 +290,7 @@ export async function main() {
     const uptimeSec = Math.floor((Date.now() - startedAt) / 1000);
     const h = Math.floor(uptimeSec / 3600);
     const m = Math.floor((uptimeSec % 3600) / 60);
-    await sendLifecycleNotification(activeBots, `🔴 cc-im 服务正在关闭...\n运行时长: ${h > 0 ? `${h}h${m}m` : `${m}m`}`).catch(() => {});
+    await sendLifecycleNotification(activeBots, config, true, { h, m }).catch(() => {});
 
     telegramHandle?.stop();
     if (config.enabledPlatforms.includes('telegram')) stopTelegram();
@@ -337,15 +310,3 @@ export async function main() {
   process.on('SIGINT', () => { shutdown().catch(() => process.exit(1)); });
   process.on('SIGTERM', () => { shutdown().catch(() => process.exit(1)); });
 }
-
-// Run directly
-const isDirectRun = process.argv[1]?.endsWith('/index.js') || process.argv[1]?.endsWith('/index.ts');
-if (isDirectRun) {
-  main().catch((err) => {
-    console.error('Fatal error:', err);
-    closeLogger();
-    process.exit(1);
-  });
-}
-
-export { startUnifiedMode };
