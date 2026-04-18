@@ -32,9 +32,11 @@ export interface LocaleStrings {
   approvalDenied: string;
   approvalExpired: string;
   approvalNotConfigured: string;
+  approvalNotConfiguredShort: string;
   approvalResult: (command: string, decision: 'approved' | 'denied' | 'expired') => string;
   usageApprove: string;
   usageReject: string;
+  approvalNotFound: string;
   // 启动/关闭
   serviceStarted: string;
   serviceShutdown: string;
@@ -68,6 +70,7 @@ export interface LocaleStrings {
   currentNoSession: string;
   sessionAlreadyCurrent: string;
   sessionResumed: string;
+  sessionResumedSuffix: string;
   invalidSessionIndex: string;
   invalidModelName: string;
   modelChanged: string;
@@ -76,6 +79,7 @@ export interface LocaleStrings {
   noHistoryRecord: string;
   noThreads: string;
   threadListTitle: string;
+  threadListSuffix: string;
   workingDirectory: string;
   subdirectories: string;
   useCdToSwitch: string;
@@ -136,6 +140,7 @@ export interface LocaleStrings {
   permissionCardTitle: string;
   permissionAllowedStatus: string;
   permissionDeniedStatus: string;
+  permissionCardContent: string;
   permissionAllowedText: string;
   permissionDeniedText: string;
   // 按钮
@@ -246,6 +251,7 @@ const zh: LocaleStrings = {
   noActiveSession: '当前没有活动会话，无需压缩。',
   queueFull: '请求队列已满，请等待当前任务完成后再试。',
   compactQueued: '前面还有任务在处理中，压缩请求已排队等待。',
+  noSessionToCompact: '当前没有活动会话，无需压缩。',
 
   // 费用统计
   costTitle: '💰 费用统计（本次服务启动后）:',
@@ -417,6 +423,7 @@ const en: LocaleStrings = {
   noActiveSession: 'No active session, no need to compact.',
   queueFull: 'Request queue is full, please wait for current task to complete.',
   compactQueued: 'Tasks are being processed, compact request queued.',
+  noSessionToCompact: 'No active session, no need to compact.',
 
   // 费用统计
   costTitle: '💰 Cost Statistics (Since service started):',

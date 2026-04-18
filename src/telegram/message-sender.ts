@@ -93,9 +93,10 @@ async function callWithRetry<T>(chatId: string, label: string, fn: () => Promise
   });
 }
 
-export type MessageStatus = 'thinking' | 'streaming' | 'done' | 'error';
+export type MessageStatus = 'processing' | 'thinking' | 'streaming' | 'done' | 'error';
 
 const STATUS_ICONS: Record<MessageStatus, string> = {
+  processing: '🟡',
   thinking: '🔵',
   streaming: '🔵',
   done: '🟢',
