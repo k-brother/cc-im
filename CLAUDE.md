@@ -11,8 +11,11 @@ Synapse is a multi-platform bot bridge service with two modes:
 ## Development Commands
 
 ```bash
+pnpm install    # Install dependencies
 pnpm dev        # Development mode (auto-reload)
 pnpm build      # Build for production
+npm install -g @tk-brother/synapse  # Global install
+```
 pnpm start      # Production mode (foreground)
 Synapse -d       # Daemon mode (background)
 Synapse stop      # Stop daemon

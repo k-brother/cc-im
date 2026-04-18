@@ -1,6 +1,6 @@
 {
   "name": "@tk-brother/synapse",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with MCP server support — Claude Code superpower",
   "repository": {
     "type": "git",
