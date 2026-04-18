@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "cc-im",
+    "synapse"
+  ],
+  "enableAllProjectMcpServers": true
+}

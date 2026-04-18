@@ -1,13 +1,11 @@
 import { MAX_STREAMING_CONTENT_LENGTH, MAX_CARD_CONTENT_LENGTH } from '../constants.js';
 import { splitLongContent as sharedSplitLongContent, truncateText, buildInputSummary } from '../shared/utils.js';
 import { t, type Language } from '../i18n.js';
-import { loadConfig } from '../config.js';
 
-// Lazy-load config to avoid circular dependency
-let _config: ReturnType<typeof loadConfig> | null = null;
+// Read language directly from env to avoid loading full config (which validates Claude CLI)
 function getLang(): Language {
-  if (!_config) _config = loadConfig();
-  return _config.language;
+  const lang = process.env.SYNAPSE_LANGUAGE?.toLowerCase();
+  return (lang === 'en' ? 'en' : 'zh') as Language;
 }
 
 export type CardStatus = 'processing' | 'thinking' | 'streaming' | 'done' | 'error';
