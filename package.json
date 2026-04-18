@@ -1,5 +1,5 @@
 {
-  "name": "@k-brother/synapse",
+  "name": "@tk-brother/synapse",
   "version": "1.0.0",
   "description": "Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with MCP server support — Claude Code superpower",
   "repository": {
