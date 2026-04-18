@@ -1,6 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Read(//Users/brother/.synapse/**)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "synapse"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
