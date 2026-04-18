@@ -1,9 +1,10 @@
 {
   "mcpServers": {
-    "cc-im": {
+    "synapse": {
       "type": "stdio",
-      "command": "cc-im",
-      "description": "cc-im unified Bridge + MCP server (WeCom + Feishu + Telegram)"
+      "command": "synapse",
+      "args": ["mcp"],
+      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
     }
   }
 }

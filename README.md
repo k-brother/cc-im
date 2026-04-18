@@ -1,4 +1,4 @@
-# cc-im
+# Synapse
 
 Multi-platform bot bridge connecting Feishu, Telegram, WeCom, DingTalk with Claude Code CLI.
 
@@ -27,10 +27,10 @@ Multi-platform bot bridge connecting Feishu, Telegram, WeCom, DingTalk with Clau
 ```bash
 # Configure at least one platform
 export TELEGRAM_BOT_TOKEN=your_token
-export CC_IM_LANGUAGE=en   # Optional, defaults to Chinese
+export SYNAPSE_LANGUAGE=en   # Optional, defaults to Chinese
 
 # Run
-npx cc-im@latest
+npx synapse@latest
 ```
 
 ## Features
@@ -43,7 +43,7 @@ npx cc-im@latest
 - Image messages and screenshots
 - Stop button for long-running tasks
 - Lifecycle notifications (startup/shutdown)
-- Daemon mode (`cc-im -d`)
+- Daemon mode (`Synapse -d`)
 
 ## Documentation
 

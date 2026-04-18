@@ -1,5 +1,5 @@
 /**
- * MCP Tools for cc-im
+ * MCP Tools for Synapse - Multi-platform AI bridge
  * Provides send_message, get_active_chats, get_chat_info, get_incoming_messages
  */
 

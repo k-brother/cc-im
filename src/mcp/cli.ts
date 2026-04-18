@@ -19,7 +19,7 @@ export async function startMcpMode(): Promise<void> {
   initLogger(config.logDir, config.logLevel);
   loadActiveChats();
 
-  log.info('Starting cc-im MCP mode (standalone, no AI)...');
+  log.info('Starting Synapse MCP mode (standalone, no AI)...');
 
   if (!config.enabledPlatforms.includes('wecom')) {
     log.error('WeCom is not enabled. Please configure WECOM_BOT_ID and WECOM_BOT_SECRET.');
@@ -44,7 +44,7 @@ export async function startMcpMode(): Promise<void> {
     // Start MCP server on stdio
     log.info('Starting MCP server on stdio...');
     const server = new McpServer(
-      { name: 'cc-im', version: '1.6.0' },
+      { name: 'synapse', version: '1.0.0' },
       { capabilities: { tools: {} } }
     );
 

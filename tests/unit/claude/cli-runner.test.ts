@@ -114,11 +114,11 @@ describe('CLI Runner', () => {
   });
 
   it.each([
-    { option: 'chatId', value: 'chat-123', envKey: 'CC_IM_CHAT_ID', envValue: 'chat-123' },
-    { option: 'hookPort', value: 18900, envKey: 'CC_IM_HOOK_PORT', envValue: '18900' },
-    { option: 'threadRootMsgId', value: 'om-root-123', envKey: 'CC_IM_THREAD_ROOT_MSG_ID', envValue: 'om-root-123' },
-    { option: 'threadId', value: 'omt-thread-456', envKey: 'CC_IM_THREAD_ID', envValue: 'omt-thread-456' },
-    { option: 'platform', value: 'feishu', envKey: 'CC_IM_PLATFORM', envValue: 'feishu' },
+    { option: 'chatId', value: 'chat-123', envKey: 'SYNAPSE_CHAT_ID', envValue: 'chat-123' },
+    { option: 'hookPort', value: 18900, envKey: 'SYNAPSE_HOOK_PORT', envValue: '18900' },
+    { option: 'threadRootMsgId', value: 'om-root-123', envKey: 'SYNAPSE_THREAD_ROOT_MSG_ID', envValue: 'om-root-123' },
+    { option: 'threadId', value: 'omt-thread-456', envKey: 'SYNAPSE_THREAD_ID', envValue: 'omt-thread-456' },
+    { option: 'platform', value: 'feishu', envKey: 'SYNAPSE_PLATFORM', envValue: 'feishu' },
   ])('传入 $option 时应该设置 $envKey 环境变量', ({ option, value, envKey, envValue }) => {
     const callbacks = { onText: vi.fn(), onComplete: vi.fn(), onError: vi.fn() };
     runClaude('/claude', 'prompt', undefined, '/work', callbacks, { [option]: value });

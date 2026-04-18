@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-Developer guide for working with cc-im codebase.
+Developer guide for working with Synapse codebase.
 
 ## Project Overview
 
-cc-im is a multi-platform bot bridge service with two modes:
+Synapse is a multi-platform bot bridge service with two modes:
 - **Bridge Mode**: Receives messages → invokes Claude Code → streams responses back
 - **MCP Server Mode**: MCP protocol via stdio for proactive messaging
 
@@ -14,8 +14,8 @@ cc-im is a multi-platform bot bridge service with two modes:
 pnpm dev        # Development mode (auto-reload)
 pnpm build      # Build for production
 pnpm start      # Production mode (foreground)
-cc-im -d       # Daemon mode (background)
-cc-im stop      # Stop daemon
+Synapse -d       # Daemon mode (background)
+Synapse stop      # Stop daemon
 pnpm test       # Run tests
 pnpm test:watch # Watch mode
 ```
@@ -26,7 +26,7 @@ pnpm test:watch # Watch mode
 
 - `src/cli.ts` → parses CLI arguments (foreground/daemon/mcp)
 - `src/index.ts` → `main()` unified entry (Bridge + MCP mode)
-- `src/mcp/cli.ts` → MCP-only mode entry (`cc-im mcp`)
+- `src/mcp/cli.ts` → MCP-only mode entry (`Synapse mcp`)
 
 ### Platform Modules
 
@@ -58,7 +58,7 @@ Platform → EventHandler → CommandHandler → RequestQueue → ClaudeTask
 
 Configuration is loaded from (priority high→low):
 1. Environment variables
-2. `~/.cc-im/config.json`
+2. `~/.Synapse/config.json`
 3. Defaults
 
 Key config interfaces in `src/config.ts`:

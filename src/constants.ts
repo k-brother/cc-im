@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { RiskLevel } from './access/types.js';
@@ -43,11 +44,16 @@ export const COMMAND_RISK_LEVELS: Record<string, RiskLevel> = {
 };
 
 /**
- * 应用数据根目录 ~/.cc-im
+ * Synapse 应用数据根目录
+ * 优先使用 ~/.cc-im（已存在则兼容），否则使用 ~/.synapse
  */
-export const APP_HOME = join(homedir(), '.cc-im');
+export const APP_HOME = (() => {
+  const ccImDir = join(homedir(), '.cc-im');
+  const synapseDir = join(homedir(), '.synapse');
+  return existsSync(ccImDir) ? ccImDir : synapseDir;
+})();
 
-export const IMAGE_DIR = join(tmpdir(), 'cc-im-images');
+export const IMAGE_DIR = join(tmpdir(), 'synapse-images');
 
 /**
  * 只读工具列表 - 这些工具不需要权限确认

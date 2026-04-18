@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * cc-im Unified Entry Point
+ * Synapse — Multi-Platform AI Bridge
  *
  * Starts both Bridge (AI + commands) and MCP server in the same process.
- * - Bridge handles WeCom messages (AI chat + commands)
- * - MCP provides admin tools via stdio for sending messages
+ * - Bridge handles messages from Feishu/Telegram/WeCom/DingTalk
+ * - MCP provides admin tools via stdio for proactive messaging
  *
- * Usage: cc-im [options]
+ * Usage: synapse [options]
  *   (no args)    - Start Bridge + MCP (unified mode)
  *   -d, --daemon - Start Bridge as daemon
  *   stop         - Stop running service
@@ -74,7 +74,7 @@ function getBotName(platform: 'feishu' | 'telegram' | 'wecom' | 'dingtalk', conf
   // Fall back to unified botName
   if (config.botName) return config.botName;
   // Default fallback
-  return 'cc-im';
+  return 'Synapse';
 }
 
 const GROUP_GREETING = (botName: string) => t(getLang()).groupGreeting(botName);
@@ -191,7 +191,7 @@ export async function main() {
   const config = loadConfig();
   initLogger(config.logDir, config.logLevel);
   loadActiveChats();
-  log.info('Starting cc-im unified mode (Bridge + MCP)...');
+  log.info('Starting Synapse unified mode (Bridge + MCP)...');
   log.info(`Enabled platforms: ${config.enabledPlatforms.join(', ')}`);
   log.info(`Allowed users: ${formatAllowedUsersLog(config)}`);
   log.info(`Claude CLI: ${config.claudeCliPath}`);
@@ -218,7 +218,7 @@ export async function main() {
   // Start MCP server on stdio (blocks until Claude Code connects)
   log.info('Starting MCP server on stdio...');
   const server = new McpServer(
-    { name: 'cc-im', version: APP_VERSION },
+    { name: 'synapse', version: APP_VERSION },
     { capabilities: { tools: {} } }
   );
 
@@ -345,7 +345,7 @@ export async function main() {
   const startedAt = Date.now();
   const locale = t(getLang());
   const startupMsg = [
-    `🟢 cc-im v${APP_VERSION} ${locale.serviceStarted}`,
+    `🟢 Synapse v${APP_VERSION} ${locale.serviceStarted}`,
     '',
     `${locale.platform}: ${activeBots.join(' + ')}`,
     `${locale.workingDir}: ${config.claudeWorkDir}`,

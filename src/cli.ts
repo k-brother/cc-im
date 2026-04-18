@@ -57,7 +57,7 @@ async function start() {
   const oldPid = getPidFromFile();
   if (oldPid && isRunning(oldPid)) {
     logger.info(`服务已在运行中 (PID: ${oldPid})`);
-    logger.info(`请先运行: cc-im stop`);
+    logger.info(`请先运行: synapse stop`);
     process.exit(1);
   }
 
@@ -122,7 +122,7 @@ function startDaemon() {
   const oldPid = getPidFromFile();
   if (oldPid && isRunning(oldPid)) {
     logger.info(`服务已在运行中 (PID: ${oldPid})`);
-    logger.info(`请先运行: cc-im stop`);
+    logger.info(`请先运行: synapse stop`);
     process.exit(1);
   }
 
@@ -143,7 +143,7 @@ function startDaemon() {
 
   logger.info(`服务已在后台启动 (PID: ${child.pid})`);
   logger.info(`日志文件: ${outLog}`);
-  logger.info(`停止服务: cc-im stop`);
+  logger.info(`停止服务: synapse stop`);
 }
 
 const { command, daemon } = parseArgs();

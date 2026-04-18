@@ -4,12 +4,12 @@
  * Claude Code PreToolUse hook script.
  *
  * This script is invoked by Claude Code before each tool execution.
- * It sends a permission request to the cc-im permission server,
+ * It sends a permission request to the Synapse permission server,
  * which notifies the user via the messaging platform and waits for their decision.
  *
  * Environment variables:
- *   CC_IM_CHAT_ID   - Chat ID to send the permission card to
- *   CC_IM_HOOK_PORT - Port of the local permission server (default: 18900)
+ *   SYNAPSE_CHAT_ID   - Chat ID to send the permission card to
+ *   SYNAPSE_HOOK_PORT - Port of the local permission server (default: 18900)
  *
  * stdin: JSON { session_id, tool_name, tool_input }
  * stdout: JSON { permissionDecision: "allow" | "deny" }
@@ -69,12 +69,12 @@ function httpPost(port: number, path: string, body: unknown): Promise<{ status: 
 }
 
 async function main() {
-  const chatId = process.env.CC_IM_CHAT_ID;
-  const port = parseInt(process.env.CC_IM_HOOK_PORT ?? '18900', 10);
+  const chatId = process.env.SYNAPSE_CHAT_ID;
+  const port = parseInt(process.env.SYNAPSE_HOOK_PORT ?? '18900', 10);
 
   // No chat ID configured - deny by default for security
   if (!chatId) {
-    process.stderr.write('Warning: CC_IM_CHAT_ID not set, denying by default. Check hook configuration.\n');
+    process.stderr.write('Warning: SYNAPSE_CHAT_ID not set, denying by default. Check hook configuration.\n');
     process.stdout.write(JSON.stringify({ permissionDecision: 'deny' }));
     process.exit(HOOK_EXIT_CODES.SUCCESS);
   }
@@ -99,9 +99,9 @@ async function main() {
     process.exit(HOOK_EXIT_CODES.SUCCESS);
   }
 
-  const threadRootMsgId = process.env.CC_IM_THREAD_ROOT_MSG_ID;
-  const threadId = process.env.CC_IM_THREAD_ID;
-  const platform = process.env.CC_IM_PLATFORM;
+  const threadRootMsgId = process.env.SYNAPSE_THREAD_ROOT_MSG_ID;
+  const threadId = process.env.SYNAPSE_THREAD_ID;
+  const platform = process.env.SYNAPSE_PLATFORM;
 
   try {
     const result = await httpPost(port, '/permission-request', {
@@ -125,7 +125,7 @@ async function main() {
     // Output deny decision to stdout so Claude Code can proceed (rather than hanging)
     const errorMessage = err instanceof Error ? err.message : String(err);
     process.stderr.write(`Error: Permission server unreachable (port ${port}): ${errorMessage}\n`);
-    process.stderr.write('Denying operation by default for security. Please check if cc-im is running.\n');
+    process.stderr.write('Denying operation by default for security. Please check if Synapse is running.\n');
 
     // Write deny decision to stdout
     process.stdout.write(JSON.stringify({ permissionDecision: 'deny' }));

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/k-brother/synapse/main/config.schema.json",
+  "language": "zh",
+
+  "platforms": {
+    "feishu": {
+      "appId": "cli_xxxxxxxxxxxx",
+      "appSecret": "xxxxxxxxxxxxxxxx",
+      "botName": "飞书助手"
+    },
+    "telegram": {
+      "botToken": "123456789:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      "botName": "Telegram助手"
+    },
+    "wecom": {
+      "botId": "1234567890",
+      "botSecret": "xxxxxxxxxxxxxxxx",
+      "botName": "企业微信助手"
+    },
+    "dingtalk": {
+      "agentId": "12345678",
+      "appKey": "ding_xxxxxxxxxxxx",
+      "appSecret": "xxxxxxxxxxxxxxxx",
+      "botName": "钉钉助手"
+    }
+  },
+
+  "botName": "Synapse",
+
+  "privileged": {
+    "users": {
+      "feishu": [],
+      "telegram": [],
+      "wecom": [],
+      "dingtalk": []
+    },
+    "startup": {
+      "feishu": { "groups": [], "users": [] },
+      "telegram": { "groups": [], "users": [] },
+      "wecom": { "groups": [], "users": [] },
+      "dingtalk": { "groups": [], "users": [] }
+    },
+    "approval": {
+      "targets": {
+        "feishu": [],
+        "telegram": [],
+        "wecom": [],
+        "dingtalk": []
+      },
+      "settings": {
+        "timeoutMs": 300000
+      }
+    }
+  }
+}

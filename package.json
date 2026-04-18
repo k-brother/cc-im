@@ -1,37 +1,45 @@
 {
-  "name": "cc-im",
-  "version": "1.6.1",
-  "description": "Multi-platform bot bridge (Feishu, Telegram & WeCom) for Claude Code CLI with MCP server support",
+  "name": "synapse",
+  "version": "1.0.0",
+  "description": "Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with MCP server support — Claude Code superpower",
   "repository": {
     "type": "git",
-    "url": "https://github.com/k-brother/cc-im.git"
+    "url": "https://github.com/k-brother/synapse.git"
   },
-  "homepage": "https://github.com/k-brother/cc-im",
+  "homepage": "https://github.com/k-brother/synapse",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "cc-im": "dist/cli.js"
+    "synapse": "dist/cli.js"
   },
   "files": [
     "dist",
-    ".env.example"
+    ".env.example",
+    "config.example.json",
+    ".mcp.json"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/postinstall.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "keywords": [
+    "synapse",
+    "claude",
+    "claude-code",
+    "mcp",
     "feishu",
     "lark",
     "telegram",
-    "claude",
-    "claude-code",
+    "wecom",
+    "dingtalk",
     "bot",
-    "bridge"
+    "bridge",
+    "ai"
   ],
   "license": "MIT",
   "dependencies": {

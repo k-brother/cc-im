@@ -1,4 +1,4 @@
-# cc-im 中文文档
+# Synapse 中文文档
 
 多平台机器人桥接服务，连接飞书、Telegram、企业微信、钉钉与 Claude Code CLI。
 
@@ -20,7 +20,7 @@
 
 ## 项目简介
 
-cc-im 是一个多平台机器人桥接服务，同时支持 **Bridge 模式**（接收消息、调用 AI、推送回复）和 **MCP Server 模式**（通过 stdio 与 MCP 客户端集成）。
+Synapse 是一个多平台机器人桥接服务，同时支持 **Bridge 模式**（接收消息、调用 AI、推送回复）和 **MCP Server 模式**（通过 stdio 与 MCP 客户端集成）。
 
 支持平台：
 | 平台 | SDK | 协议 |
@@ -34,7 +34,7 @@ cc-im 是一个多平台机器人桥接服务，同时支持 **Bridge 模式**�
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      cc-im 服务进程                          │
+│                      Synapse 服务进程                          │
 ├─────────────────────────────────────────────────────────────┤
 │  MCP Server (抢占 stdio)                                     │
 │  ├── Bridge Handler (注册到各平台)                           │
@@ -78,14 +78,16 @@ cc-im 是一个多平台机器人桥接服务，同时支持 **Bridge 模式**�
 
 ```bash
 # 启动 MCP Server
-cc-im mcp
+Synapse mcp
 
 # Claude Code 配置 ~/.claude/.mcp.json
 {
   "mcpServers": {
-    "cc-im": {
-      "command": "cc-im",
-      "args": ["mcp"]
+    "synapse": {
+      "type": "stdio",
+      "command": "synapse",
+      "args": ["mcp"],
+      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
     }
   }
 }
@@ -108,7 +110,7 @@ cc-im mcp
 # 环境变量
 export CC_IM_LANGUAGE=en
 
-# 配置文件 ~/.cc-im/config.json
+# 配置文件 ~/.synapse/config.json
 {
   "language": "en"
 }
@@ -137,7 +139,7 @@ export CC_IM_LANGUAGE=en
 - **长消息分片**：超长内容自动拆分
 - **停止按钮**：执行中可随时停止任务
 - **生命周期通知**：启动/关闭时通知活跃用户
-- **守护进程模式**：`cc-im -d` 后台运行
+- **守护进程模式**：`Synapse -d` 后台运行
 - **版本更新检查**：启动时自动检测新版本
 
 ---
@@ -163,7 +165,7 @@ export DINGTALK_APP_KEY=xxx
 export DINGTALK_APP_SECRET=xxx
 
 # 启动（自动检测已配置的平台）
-npx cc-im@latest
+npx synapse@latest
 
 # 或从源码运行
 pnpm install
@@ -173,13 +175,13 @@ pnpm dev
 ### 从源码构建
 
 ```bash
-git clone https://github.com/k-brother/cc-im.git
-cd cc-im
+git clone https://github.com/k-brother/synapse.git
+cd synapse
 pnpm install
 pnpm build
 pnpm start    # 前台运行
-cc-im -d     # 后台运行
-cc-im stop   # 停止
+Synapse -d     # 后台运行
+Synapse stop   # 停止
 ```
 
 ---
@@ -313,12 +315,12 @@ export DINGTALK_APP_SECRET=your_app_secret
 | `CLAUDE_MODEL` | 默认模型 | 空（AI 决定） |
 | `PROXY_URL` | 代理地址 | - |
 | `HOOK_SERVER_PORT` | 权限服务端口 | `18900` |
-| `LOG_DIR` | 日志目录 | `~/.cc-im/logs` |
+| `LOG_DIR` | 日志目录 | `~/.synapse/logs` |
 | `LOG_LEVEL` | 日志等级 | `DEBUG` |
 
 ### 配置文件
 
-`~/.cc-im/config.json`：
+`~/.synapse/config.json`：
 
 ```json
 {
@@ -345,13 +347,19 @@ export DINGTALK_APP_SECRET=your_app_secret
       "botName": "钉钉机器人"
     }
   },
-  "botName": "cc-im",
+  "botName": "synapse",
   "privileged": {
     "users": {
       "feishu": ["ou_xxx"],
       "telegram": ["123456789"],
       "wecom": ["user1"],
       "dingtalk": ["user1"]
+    },
+    "startup": {
+      "feishu": { "groups": [], "users": [] },
+      "telegram": { "groups": [], "users": [] },
+      "wecom": { "groups": [], "users": [] },
+      "dingtalk": { "groups": [], "users": [] }
     },
     "approval": {
       "targets": {
@@ -371,7 +379,7 @@ export DINGTALK_APP_SECRET=your_app_secret
 ### 应用数据目录
 
 ```
-~/.cc-im/
+~/.synapse/
 ├── config.json           # 配置文件
 ├── data/
 │   ├── sessions.json     # 会话持久化
@@ -387,7 +395,7 @@ export DINGTALK_APP_SECRET=your_app_secret
 
 ### 三级风险模型
 
-cc-im 将命令分为三个风险等级：
+Synapse 将命令分为三个风险等级：
 
 | 等级 | 私聊 | 群聊 | 说明 |
 |------|------|------|------|
@@ -448,7 +456,7 @@ L2 命令在群聊中执行时，系统创建审批请求并通知管理员：
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/cc-im/dist/hook/hook-script.js"
+            "command": "/path/to/synapse/dist/hook/hook-script.js"
           }
         ]
       }
@@ -473,7 +481,7 @@ MCP Server 模式让 Claude Code 可以通过 stdio 主动向各平台发送消�
 # 环境变量配置平台凭证
 export WECOM_BOT_ID=xxx
 export WECOM_BOT_SECRET=xxx
-cc-im mcp
+Synapse mcp
 ```
 
 ### Claude Code 配置
@@ -482,9 +490,11 @@ cc-im mcp
 // ~/.claude/.mcp.json
 {
   "mcpServers": {
-    "cc-im": {
-      "command": "cc-im",
-      "args": ["mcp"]
+    "synapse": {
+      "type": "stdio",
+      "command": "synapse",
+      "args": ["mcp"],
+      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
     }
   }
 }
@@ -503,14 +513,14 @@ cc-im mcp
 
 ```javascript
 // 发送消息
-await mcp__cc-im__send_message({
+await mcp__synapse__send_message({
   platform: "wecom",
   chatId: "群ID或用户ID",
   content: "Hello from Claude!"
 });
 
 // 获取活跃聊天
-const chats = await mcp__cc-im__get_active_chats({ platform: "wecom" });
+const chats = await mcp__synapse__get_active_chats({ platform: "wecom" });
 ```
 
 ---
@@ -518,7 +528,7 @@ const chats = await mcp__cc-im__get_active_chats({ platform: "wecom" });
 ## 项目结构
 
 ```
-cc-im/
+Synapse/
 ├── src/
 │   ├── index.ts              # Bridge + MCP 统一入口
 │   ├── cli.ts                # CLI 解析（前台/守护/MCP）

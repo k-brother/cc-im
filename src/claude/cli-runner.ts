@@ -63,19 +63,19 @@ export function runClaude(
 
   const env: Record<string, string | undefined> = { ...process.env };
   if (options?.chatId) {
-    env.CC_IM_CHAT_ID = options.chatId;
+    env.SYNAPSE_CHAT_ID = options.chatId;
   }
   if (options?.hookPort) {
-    env.CC_IM_HOOK_PORT = String(options.hookPort);
+    env.SYNAPSE_HOOK_PORT = String(options.hookPort);
   }
   if (options?.threadRootMsgId) {
-    env.CC_IM_THREAD_ROOT_MSG_ID = options.threadRootMsgId;
+    env.SYNAPSE_THREAD_ROOT_MSG_ID = options.threadRootMsgId;
   }
   if (options?.threadId) {
-    env.CC_IM_THREAD_ID = options.threadId;
+    env.SYNAPSE_THREAD_ID = options.threadId;
   }
   if (options?.platform) {
-    env.CC_IM_PLATFORM = options.platform;
+    env.SYNAPSE_PLATFORM = options.platform;
   }
   if (options?.proxyUrl) {
     env.HTTPS_PROXY = options.proxyUrl;

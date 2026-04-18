@@ -324,7 +324,7 @@ export function loadConfig(): Config {
   const logDir = process.env.LOG_DIR ?? file.logDir ?? join(APP_HOME, 'logs');
   const logLevel = (process.env.LOG_LEVEL?.toUpperCase() ?? file.logLevel ?? 'DEBUG') as LogLevel;
 
-  const language = (process.env.CC_IM_LANGUAGE?.toLowerCase() ?? file.language ?? 'zh') as Language;
+  const language = (process.env.SYNAPSE_LANGUAGE?.toLowerCase() ?? file.language ?? 'zh') as Language;
 
   return {
     platforms,

@@ -17,6 +17,7 @@ export default defineConfig({
         'src/hook/hook-script.ts',
         // 这些文件有复杂的错误处理或外部依赖，难以全面测试
         'src/telegram/client.ts',
+        'src/dingtalk/client.ts',
         // 飞书事件处理器包含大量平台特有逻辑（图片处理、卡片交互等），测试复杂度高
         'src/feishu/event-handler.ts',
       ],

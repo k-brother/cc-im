@@ -3,7 +3,7 @@ import { createLogger } from '../logger.js';
 
 const log = createLogger('UpdateCheck');
 
-const NPM_REGISTRY_URL = 'https://registry.npmjs.org/cc-im/latest';
+const NPM_REGISTRY_URL = 'https://registry.npmjs.org/synapse/latest';
 const FETCH_TIMEOUT_MS = 5000;
 
 function fetchLatestVersion(): Promise<string | null> {
@@ -51,7 +51,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
   try {
     const latest = await fetchLatestVersion();
     if (latest && isNewer(currentVersion, latest)) {
-      log.info(`发现新版本 v${latest}（当前 v${currentVersion}），请运行: npx cc-im@latest 或 npm i -g cc-im@latest`);
+      log.info(`发现新版本 v${latest}（当前 v${currentVersion}），请运行: npx synapse@latest 或 npm i -g synapse@latest`);
     }
   } catch {
     // 静默忽略，不影响正常启动

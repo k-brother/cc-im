@@ -18,6 +18,7 @@ const mockExecFileSync = vi.fn();
 vi.mock('node:fs', () => ({
   readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
   accessSync: (...args: unknown[]) => mockAccessSync(...args),
+  existsSync: vi.fn(() => true),
   constants: { F_OK: 0, X_OK: 1 },
 }));
 

@@ -1,4 +1,4 @@
-# cc-im English Documentation
+# Synapse English Documentation
 
 Multi-platform bot bridge service connecting Feishu, Telegram, WeCom, DingTalk, and Claude Code CLI.
 
@@ -20,7 +20,7 @@ Multi-platform bot bridge service connecting Feishu, Telegram, WeCom, DingTalk, 
 
 ## Overview
 
-cc-im is a multi-platform bot bridge service with two operating modes:
+Synapse is a multi-platform bot bridge service with two operating modes:
 
 - **Bridge Mode**: Receives messages, invokes Claude Code AI, streams responses back to chat
 - **MCP Server Mode**: Integrates with MCP clients (like Claude Code) via stdio
@@ -38,7 +38,7 @@ cc-im is a multi-platform bot bridge service with two operating modes:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      cc-im Process                          │
+│                      Synapse Process                          │
 ├─────────────────────────────────────────────────────────────┤
 │  MCP Server (stdio)                                         │
 │  ├── Bridge Handler (registered to each platform)           │
@@ -82,14 +82,16 @@ Through MCP Server, Claude Code can proactively send messages to platforms:
 
 ```bash
 # Start MCP Server
-cc-im mcp
+Synapse mcp
 
 # Claude Code config ~/.claude/.mcp.json
 {
   "mcpServers": {
-    "cc-im": {
-      "command": "cc-im",
-      "args": ["mcp"]
+    "synapse": {
+      "type": "stdio",
+      "command": "synapse",
+      "args": ["mcp"],
+      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
     }
   }
 }
@@ -112,7 +114,7 @@ System UI messages support Chinese and English, controlled via `language` config
 # Environment variable
 export CC_IM_LANGUAGE=en
 
-# Config file ~/.cc-im/config.json
+# Config file ~/.synapse/config.json
 {
   "language": "en"
 }
@@ -141,7 +143,7 @@ User's conversation language with Claude Code is completely independent of syste
 - **Long Message Splitting**: Automatic split for oversized content
 - **Stop Button**: Stop tasks at any time during execution
 - **Lifecycle Notifications**: Notify active users on startup/shutdown
-- **Daemon Mode**: `cc-im -d` for background operation
+- **Daemon Mode**: `Synapse -d` for background operation
 - **Version Update Check**: Automatic new version detection on startup
 
 ---
@@ -167,7 +169,7 @@ export DINGTALK_APP_KEY=xxx
 export DINGTALK_APP_SECRET=xxx
 
 # Start (auto-detects configured platforms)
-npx cc-im@latest
+npx synapse@latest
 
 # Or run from source
 pnpm install
@@ -177,13 +179,13 @@ pnpm dev
 ### Build from Source
 
 ```bash
-git clone https://github.com/k-brother/cc-im.git
-cd cc-im
+git clone https://github.com/k-brother/synapse.git
+cd synapse
 pnpm install
 pnpm build
 pnpm start    # Foreground
-cc-im -d     # Background
-cc-im stop   # Stop
+Synapse -d     # Background
+Synapse stop   # Stop
 ```
 
 ---
@@ -317,12 +319,12 @@ export DINGTALK_APP_SECRET=your_app_secret
 | `CLAUDE_MODEL` | Default model | (AI decides) |
 | `PROXY_URL` | Proxy URL | - |
 | `HOOK_SERVER_PORT` | Permission server port | `18900` |
-| `LOG_DIR` | Log directory | `~/.cc-im/logs` |
+| `LOG_DIR` | Log directory | `~/.synapse/logs` |
 | `LOG_LEVEL` | Log level | `DEBUG` |
 
 ### Configuration File
 
-`~/.cc-im/config.json`:
+`~/.synapse/config.json`:
 
 ```json
 {
@@ -349,13 +351,19 @@ export DINGTALK_APP_SECRET=your_app_secret
       "botName": "DingTalk Bot"
     }
   },
-  "botName": "cc-im",
+  "botName": "synapse",
   "privileged": {
     "users": {
       "feishu": ["ou_xxx"],
       "telegram": ["123456789"],
       "wecom": ["user1"],
       "dingtalk": ["user1"]
+    },
+    "startup": {
+      "feishu": { "groups": [], "users": [] },
+      "telegram": { "groups": [], "users": [] },
+      "wecom": { "groups": [], "users": [] },
+      "dingtalk": { "groups": [], "users": [] }
     },
     "approval": {
       "targets": {
@@ -375,7 +383,7 @@ export DINGTALK_APP_SECRET=your_app_secret
 ### Application Data Directory
 
 ```
-~/.cc-im/
+~/.synapse/
 ├── config.json           # Configuration
 ├── data/
 │   ├── sessions.json     # Session persistence
@@ -391,7 +399,7 @@ export DINGTALK_APP_SECRET=your_app_secret
 
 ### Three-Tier Risk Model
 
-cc-im classifies commands into three risk levels:
+Synapse classifies commands into three risk levels:
 
 | Level | Private Chat | Group Chat | Description |
 |-------|--------------|------------|-------------|
@@ -452,7 +460,7 @@ Edit `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/cc-im/dist/hook/hook-script.js"
+            "command": "/path/to/synapse/dist/hook/hook-script.js"
           }
         ]
       }
@@ -477,7 +485,7 @@ MCP Server mode allows Claude Code to proactively send messages to platforms via
 # Configure platform credentials via env vars
 export WECOM_BOT_ID=xxx
 export WECOM_BOT_SECRET=xxx
-cc-im mcp
+Synapse mcp
 ```
 
 ### Claude Code Configuration
@@ -486,9 +494,11 @@ cc-im mcp
 // ~/.claude/.mcp.json
 {
   "mcpServers": {
-    "cc-im": {
-      "command": "cc-im",
-      "args": ["mcp"]
+    "synapse": {
+      "type": "stdio",
+      "command": "synapse",
+      "args": ["mcp"],
+      "description": "Synapse — Multi-platform AI bridge (Feishu, Telegram, WeCom, DingTalk) with proactive messaging capabilities"
     }
   }
 }
@@ -507,14 +517,14 @@ cc-im mcp
 
 ```javascript
 // Send message
-await mcp__cc-im__send_message({
+await mcp__synapse__send_message({
   platform: "wecom",
   chatId: "group_id or user_id",
   content: "Hello from Claude!"
 });
 
 // Get active chats
-const chats = await mcp__cc-im__get_active_chats({ platform: "wecom" });
+const chats = await mcp__synapse__get_active_chats({ platform: "wecom" });
 ```
 
 ---
@@ -522,7 +532,7 @@ const chats = await mcp__cc-im__get_active_chats({ platform: "wecom" });
 ## Project Structure
 
 ```
-cc-im/
+Synapse/
 ├── src/
 │   ├── index.ts              # Bridge + MCP unified entry
 │   ├── cli.ts                # CLI parsing (foreground/daemon/MCP)
