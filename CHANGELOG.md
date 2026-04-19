@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versio
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-04-19
+
+### 其他 (Other)
+
+- 优化群聊/私聊启动问候语样式，支持自定义问候语配置
+
 ## [1.0.1] - 2026-04-19
 
 ### 其他 (Other)

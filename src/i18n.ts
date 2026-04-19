@@ -292,10 +292,10 @@ const zh: LocaleStrings = {
   approvalNotFound: '不存在或已处理',
 
   // 启动问候语
-  greetingTitle: '您好！我是您的智能办公助理。',
-  greetingFeatures: '📌 支持功能：\n• 文档撰写与润色\n• 数据分析与报告\n• 智能问答与解答',
-  greetingCommands: '🔧 常用命令：\n/new — 开始新对话\n/resume — 继续未完成的对话\n/model — 切换 AI 模型\n/stop — 停止当前任务\n/chatid — 查看当前会话 ID',
-  greetingDirectMention: '💬 直接 @机器人 + 问题即可使用',
+  greetingTitle: '🤖 Brother Assistant 已上线',
+  greetingFeatures: '📌 功能：文档 · 分析 · 问答',
+  greetingCommands: '🔧 命令：\n/new     开始新对话\n/help    显示所有命令\n/chatid  查看当前会话 ID\n/resume  继续未完成的对话',
+  greetingDirectMention: '💬 直接 @机器人 + 问题即可使用\n\n🕐 服务时间: 工作日 09:00-18:00',
 
   // Telegram /start
   telegramStart: '欢迎使用 Claude Code Bot!\n\n发送消息与 Claude Code 交互，输入 /help 查看帮助。',
@@ -327,9 +327,9 @@ const zh: LocaleStrings = {
   taskCompleted: '任务已完成',
 
   // 群聊
-  groupGreeting: (botName: string) => `${botName} 已上线\n\n${zh.greetingTitle}\n\n${zh.greetingFeatures}\n\n${zh.greetingCommands}\n\n${zh.greetingDirectMention}\n\n${zh.serviceHours}`,
+  groupGreeting: (botName: string) => `${botName}\n\n${zh.greetingTitle}\n\n${zh.greetingFeatures}\n━━━━━━━━━━━━━━━━━━\n${zh.greetingCommands}\n━━━━━━━━━━━━━━━━━━\n${zh.greetingDirectMention}`,
   privateGreeting: (botName: string, activeBots: string, workDir: string, cliVersion: string, skipPerm: boolean) =>
-    `${botName} ${zh.serviceStarted}\n${zh.platform}: ${activeBots}\n${zh.workingDir}: ${workDir}\n权限确认: ${skipPerm ? zh.permissionsSkipped : zh.permissionsEnabled}\nClaude CLI: ${cliVersion}\nNode: ${process.version}`,
+    `${botName}\n\n${zh.greetingTitle}\n\n${zh.greetingFeatures}\n━━━━━━━━━━━━━━━━━━\n${zh.greetingCommands}\n━━━━━━━━━━━━━━━━━━\n📡 ${zh.platform}: ${activeBots}\n🔐 ${zh.permissionsEnabled}: ${skipPerm ? zh.permissionsSkipped : zh.permissionsEnabled}\n🤖 Claude CLI: ${cliVersion}\n📁 ${zh.workingDir}: ${workDir}\n━━━━━━━━━━━━━━━━━━\n${zh.greetingDirectMention}`,
   shutdownGreeting: (botName: string, uptime: string) => `🔴 ${botName} ${zh.serviceShutdown}...\n运行时长: ${uptime}`,
 };
 
@@ -464,10 +464,10 @@ const en: LocaleStrings = {
   approvalNotFound: 'not found or already processed',
 
   // 启动问候语
-  greetingTitle: 'Hello! I am your intelligent office assistant.',
-  greetingFeatures: '📌 Supported Features:\n• Document writing and polishing\n• Data analysis and reporting\n• Q&A and problem solving',
-  greetingCommands: '🔧 Common Commands:\n/new — Start new conversation\n/resume — Resume unfinished conversation\n/model — Switch AI model\n/stop — Stop current task\n/chatid — View current session ID',
-  greetingDirectMention: '💬 Just @bot + your question',
+  greetingTitle: "🤖 Brother Assistant is online",
+  greetingFeatures: '📌 Features: Docs · Analysis · Q&A',
+  greetingCommands: '🔧 Commands:\n/new     Start new conversation\n/help    Show all commands\n/chatid  View current session ID\n/resume  Resume unfinished conversation',
+  greetingDirectMention: '💬 Just @bot + your question\n\n🕐 Service: Weekdays 09:00-18:00',
 
   // Telegram /start
   telegramStart: 'Welcome to Claude Code Bot!\n\nSend a message to interact with Claude Code, input /help for help.',
@@ -499,9 +499,9 @@ const en: LocaleStrings = {
   taskCompleted: 'Task completed',
 
   // 群聊
-  groupGreeting: (botName: string) => `${botName} is online\n\n${en.greetingTitle}\n\n${en.greetingFeatures}\n\n${en.greetingCommands}\n\n${en.greetingDirectMention}\n\n${en.serviceHours}`,
+  groupGreeting: (botName: string) => `${botName}\n\n${en.greetingTitle}\n\n${en.greetingFeatures}\n━━━━━━━━━━━━━━━━━━\n${en.greetingCommands}\n━━━━━━━━━━━━━━━━━━\n${en.greetingDirectMention}`,
   privateGreeting: (botName: string, activeBots: string, workDir: string, cliVersion: string, skipPerm: boolean) =>
-    `${botName} ${en.serviceStarted}\n${en.platform}: ${activeBots}\n${en.workingDir}: ${workDir}\nPermissions: ${skipPerm ? en.permissionsSkipped : en.permissionsEnabled}\nClaude CLI: ${cliVersion}\nNode: ${process.version}`,
+    `${botName}\n\n${en.greetingTitle}\n\n${en.greetingFeatures}\n━━━━━━━━━━━━━━━━━━\n${en.greetingCommands}\n━━━━━━━━━━━━━━━━━━\n📡 ${en.platform}: ${activeBots}\n🔐 ${en.permissionsEnabled}: ${skipPerm ? en.permissionsSkipped : en.permissionsEnabled}\n🤖 Claude CLI: ${cliVersion}\n📁 ${en.workingDir}: ${workDir}\n━━━━━━━━━━━━━━━━━━\n${en.greetingDirectMention}`,
   shutdownGreeting: (botName: string, uptime: string) => `🔴 ${botName} ${en.serviceShutdown}...\nUptime: ${uptime}`,
 };
 

@@ -56,6 +56,11 @@ export interface StartupNotifyConfig {
   feishu?: PlatformNotifyConfig;
   telegram?: PlatformNotifyConfig;
   dingtalk?: PlatformNotifyConfig;
+  /** 自定义启动问候语 */
+  customGreeting?: {
+    group?: { zh?: string; en?: string };
+    private?: { zh?: string; en?: string };
+  };
 }
 
 /**

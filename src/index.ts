@@ -77,7 +77,12 @@ function getBotName(platform: 'feishu' | 'telegram' | 'wecom' | 'dingtalk', conf
   return 'Synapse';
 }
 
-const GROUP_GREETING = (botName: string) => t(getLang()).groupGreeting(botName);
+const GROUP_GREETING = (botName: string, config: Config) => {
+  const lang = getLang();
+  const custom = config.privileged?.startup?.customGreeting?.group?.[lang];
+  if (custom) return custom;
+  return t(lang).groupGreeting(botName);
+};
 
 const PLATFORM_LABEL: Record<string, string> = {
   WeCom: '企业微信',
@@ -97,7 +102,11 @@ function formatAllowedUsersLog(config: Config): string {
 }
 
 const PRIVATE_GREETING = (botName: string, activeBots: string[], config: Config) => {
-  const locale = t(getLang());
+  const lang = getLang();
+  const custom = config.privileged?.startup?.customGreeting?.private?.[lang];
+  if (custom) return custom;
+
+  const locale = t(lang);
   const platform = activeBots.map((b) => PLATFORM_LABEL[b] ?? b).join(' + ') || locale.noActiveSession;
   return locale.privateGreeting(
     botName,
@@ -145,7 +154,7 @@ async function sendLifecycleNotification(
       for (const chatId of notifyConfig.groups) {
         const message = isShutdown
           ? t(getLang()).shutdownGreeting(botName, uptime!.h > 0 ? `${uptime!.h}h${uptime!.m}m` : `${uptime!.m}m`)
-          : GROUP_GREETING(botName);
+          : GROUP_GREETING(botName, config);
         tasks.push(dtSender.sendTextReply(chatId, message).catch((err) => {
           log.debug(`Failed to send group notification to ${chatId}:`, err);
         }));
@@ -167,7 +176,7 @@ async function sendLifecycleNotification(
     for (const chatId of notifyConfig.groups) {
       const message = isShutdown
         ? t(getLang()).shutdownGreeting(botName, uptime!.h > 0 ? `${uptime!.h}h${uptime!.m}m` : `${uptime!.m}m`)
-        : GROUP_GREETING(botName);
+        : GROUP_GREETING(botName, config);
       tasks.push(sender(chatId, message).catch((err) => {
         log.debug(`Failed to send group notification to ${chatId}:`, err);
       }));
