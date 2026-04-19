@@ -125,7 +125,20 @@ To add a new string:
 ```typescript
 interface PrivilegedConfig {
   users: Record<Platform, string[]>;  // allowlist by platform
-  approval: ApprovalConfig;          // approval targets & settings
+  approval: ApprovalConfig;            // approval targets & settings
+  startup?: StartupNotifyConfig;       // startup/shutdown notifications + custom greetings
+}
+
+interface StartupNotifyConfig {
+  wecom?: PlatformNotifyConfig;
+  feishu?: PlatformNotifyConfig;
+  telegram?: PlatformNotifyConfig;
+  dingtalk?: PlatformNotifyConfig;
+  /** 自定义启动问候语（优先级高于默认 i18n 文本） */
+  customGreeting?: {
+    group?: { zh?: string; en?: string };   // 群聊自定义问候语
+    private?: { zh?: string; en?: string };  // 私聊自定义问候语
+  };
 }
 
 interface ApprovalConfig {

@@ -142,7 +142,7 @@ User's conversation language with Claude Code is completely independent of syste
 - **Concurrency Control**: Serial execution for same session, parallel for different sessions, max 3 queued
 - **Long Message Splitting**: Automatic split for oversized content
 - **Stop Button**: Stop tasks at any time during execution
-- **Lifecycle Notifications**: Notify active users on startup/shutdown
+- **Lifecycle Notifications**: Notify active users on startup/shutdown, with customizable greetings (`privileged.startup.customGreeting`)
 - **Daemon Mode**: `Synapse -d` for background operation
 - **Version Update Check**: Automatic new version detection on startup
 
@@ -363,7 +363,11 @@ export DINGTALK_APP_SECRET=your_app_secret
       "feishu": { "groups": [], "users": [] },
       "telegram": { "groups": [], "users": [] },
       "wecom": { "groups": [], "users": [] },
-      "dingtalk": { "groups": [], "users": [] }
+      "dingtalk": { "groups": [], "users": [] },
+      "customGreeting": {
+        "group": { "zh": "🤖 机器人已上线，有什么可以帮你的？", "en": "🤖 Bot is online, how can I help?" },
+        "private": { "zh": "👋 你好！我是你的 AI 助手", "en": "👋 Hello! I'm your AI assistant" }
+      }
     },
     "approval": {
       "targets": {

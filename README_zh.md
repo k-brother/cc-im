@@ -138,7 +138,7 @@ export CC_IM_LANGUAGE=en
 - **并发控制**：同会话串行，不同会话可并发，最多排队 3 条
 - **长消息分片**：超长内容自动拆分
 - **停止按钮**：执行中可随时停止任务
-- **生命周期通知**：启动/关闭时通知活跃用户
+- **生命周期通知**：启动/关闭时通知活跃用户，支持自定义问候语（`privileged.startup.customGreeting`）
 - **守护进程模式**：`Synapse -d` 后台运行
 - **版本更新检查**：启动时自动检测新版本
 
@@ -359,7 +359,11 @@ export DINGTALK_APP_SECRET=your_app_secret
       "feishu": { "groups": [], "users": [] },
       "telegram": { "groups": [], "users": [] },
       "wecom": { "groups": [], "users": [] },
-      "dingtalk": { "groups": [], "users": [] }
+      "dingtalk": { "groups": [], "users": [] },
+      "customGreeting": {
+        "group": { "zh": "🤖 机器人已上线，有什么可以帮你的？", "en": "🤖 Bot is online, how can I help?" },
+        "private": { "zh": "👋 你好！我是你的 AI 助手", "en": "👋 Hello! I'm your AI assistant" }
+      }
     },
     "approval": {
       "targets": {

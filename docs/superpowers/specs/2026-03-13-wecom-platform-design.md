@@ -242,6 +242,48 @@ wsClient.sendMessage(chatId, {
 - 使用 `wsClient.sendMessage(chatId, { msgtype: 'markdown', markdown: { content } })` 主动推送
 - 复用 `ActiveChats` 记录的活跃聊天
 
+**通知内容配置**：`StartupNotifyConfig` 支持自定义问候语（`customGreeting`），优先级：自定义 > 默认 i18n 文本。
+
+```typescript
+interface StartupNotifyConfig {
+  // 启动/关闭通知目标（按平台：群 + 私聊会话 ID）
+  wecom?: PlatformNotifyConfig;
+  feishu?: PlatformNotifyConfig;
+  telegram?: PlatformNotifyConfig;
+  dingtalk?: PlatformNotifyConfig;
+  /** 自定义启动问候语（优先级高于默认 i18n 文本） */
+  customGreeting?: {
+    group?: { zh?: string; en?: string };  // 群聊自定义问候语
+    private?: { zh?: string; en?: string }; // 私聊自定义问候语
+  };
+}
+```
+
+**配置示例**（`~/.Synapse/config.json`）：
+
+```json
+{
+  "privileged": {
+    "users": { "wecom": [], "feishu": [], "telegram": [], "dingtalk": [] },
+    "approval": { "targets": {}, "settings": {} },
+    "startup": {
+      "customGreeting": {
+        "group": {
+          "zh": "🤖 机器人已上线，有什么可以帮你的？",
+          "en": "🤖 Bot is online, how can I help?"
+        },
+        "private": {
+          "zh": "👋 你好！我是你的 AI 助手",
+          "en": "👋 Hello! I'm your AI assistant"
+        }
+      }
+    }
+  }
+}
+```
+
+> **说明**：`customGreeting` 完整替换默认问候语内容。如仅配置 `zh`，英文环境仍使用默认文本。
+
 ### 4. TaskAdapter 实现
 
 ```typescript
