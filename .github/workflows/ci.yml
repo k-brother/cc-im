@@ -49,7 +49,7 @@ jobs:
 
       - run: pnpm build
 
-      - run: npm publish --access public --provenance
+      - run: npm publish --access public --provenance --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
