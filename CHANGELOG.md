@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versio
 
 ## [Unreleased]
 
-## [1.0.2] - 2026-04-19
+## [1.0.2-alpha] - 2026-04-19
 
 ### 其他 (Other)
 
